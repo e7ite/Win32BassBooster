@@ -542,6 +542,29 @@ int AccountBalance();  // returns -5 when account is closed.
 std::optional<int> AccountBalance();
 ```
 
+### Initialization
+- Prefer designated initializers when constructing aggregates (structs with no
+  user-declared constructors). They make each field's purpose visible at the
+  call site and prevent silent transposition errors.
+- Omit designated initializers only when the struct has a single field or when
+  every field is obvious from positional context and the call site is
+  immediately adjacent to the struct definition.
+
+```cpp
+// Bad: positional -- easy to swap gain and frequency silently.
+const ShelfParams params = {12.0, 100.0, 48000.0};
+
+// Good: each field is named at the call site.
+const ShelfParams params = {.gain_db = 12.0,
+                            .freq_hz = 100.0,
+                            .sample_rate = 48000.0};
+```
+
+```cpp
+// Good: single-field struct -- designator adds noise, not clarity.
+const Wrapper w = {value};
+```
+
 ### Avoid brittle parameters
 - Prefer typed parameters over strings or raw integers for values that control
   behavior. Strings used as mode selectors fail silently on typos, case
