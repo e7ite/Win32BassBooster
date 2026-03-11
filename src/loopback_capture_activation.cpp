@@ -112,6 +112,20 @@ class LoopbackActivationHandler
   ULONG ref_count_ = 1;
 };
 
+[[nodiscard]] AudioPipelineInterface::Status MakeActivationErrorStatus(
+    HRESULT status_code, const wchar_t* prefix) {
+  constexpr int kHresultHexBufferChars = 9;
+
+  wchar_t hex[kHresultHexBufferChars] = {};
+  _snwprintf_s(hex, _TRUNCATE, L"%08lX",
+               static_cast<unsigned long>(status_code));
+
+  std::wstring message = prefix;
+  message += hex;
+  message += L')';
+  return AudioPipelineInterface::Status::Error(status_code, std::move(message));
+}
+
 }  // namespace
 
 AudioPipelineInterface::Status ActivateLoopbackCaptureClient(
@@ -138,13 +152,8 @@ AudioPipelineInterface::Status ActivateLoopbackCaptureClient(
 
   if (FAILED(async_hr)) {
     handler->Release();
-    std::wstring msg = L"ActivateAudioInterfaceAsync failed (0x";
-    wchar_t hex[16] = {};
-    _snwprintf_s(hex, _TRUNCATE, L"%08lX",
-                 static_cast<unsigned long>(async_hr));
-    msg += hex;
-    msg += L')';
-    return AudioPipelineInterface::Status::Error(async_hr, std::move(msg));
+    return MakeActivationErrorStatus(async_hr,
+                                     L"ActivateAudioInterfaceAsync failed (0x");
   }
 
   const HRESULT activate_hr = handler->WaitForCompletion();
@@ -154,13 +163,8 @@ AudioPipelineInterface::Status ActivateLoopbackCaptureClient(
   async_op->Release();
 
   if (FAILED(activate_hr)) {
-    std::wstring msg = L"Loopback capture activation failed (0x";
-    wchar_t hex[16] = {};
-    _snwprintf_s(hex, _TRUNCATE, L"%08lX",
-                 static_cast<unsigned long>(activate_hr));
-    msg += hex;
-    msg += L')';
-    return AudioPipelineInterface::Status::Error(activate_hr, std::move(msg));
+    return MakeActivationErrorStatus(activate_hr,
+                                     L"Loopback capture activation failed (0x");
   }
 
   return AudioPipelineInterface::Status::Ok();
