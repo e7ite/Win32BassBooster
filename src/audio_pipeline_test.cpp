@@ -80,8 +80,9 @@ TEST(AudioPipelineTest, BoostCurveIsConvexAtQuarterLevel) {
 }
 
 TEST(AudioPipelineTest, BoostLevelClampedAboveOne) {
+  constexpr double kAboveMaxLevel = 2.0;
   AudioPipeline pipeline;
-  pipeline.SetBoostLevel(2.0);
+  pipeline.SetBoostLevel(kAboveMaxLevel);
   EXPECT_NEAR(pipeline.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
   EXPECT_NEAR(pipeline.exciter_amount(), 1.0, 1e-9);
 }

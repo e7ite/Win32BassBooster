@@ -152,10 +152,12 @@ TEST(BassBoostFilterTest, FrequencyAccessorReturnsSetValue) {
 }
 
 TEST(BassBoostFilterTest, FrequencyClampedAboveNyquistGuard) {
+  constexpr double kAboveNyquist = 100'000.0;
+  constexpr double kNyquistGuardRatio = 0.4;
   BassBoostFilter filter(kSampleRate);
-  filter.SetFrequency(100'000.0);
+  filter.SetFrequency(kAboveNyquist);
   // 0.4 * 48000 = 19200 Hz is the upper limit.
-  EXPECT_LE(filter.frequency(), kSampleRate * 0.4);
+  EXPECT_LE(filter.frequency(), kSampleRate * kNyquistGuardRatio);
 }
 
 TEST(BassBoostFilterTest, FrequencyClampedBelowMinimum) {
@@ -232,10 +234,9 @@ TEST(BassBoostFilterTest, SetSampleRateUpdatesCoefficients) {
   filter.SetSampleRate(kNewSampleRate);
   const BiquadCoeffs& after = filter.coefficients();
   // Coefficients depend on sample rate; at least one must change.
-  const bool coeffs_changed =
-      std::abs(before.b0 - after.b0) > 1e-9 ||
-      std::abs(before.b1 - after.b1) > 1e-9 ||
-      std::abs(before.a1 - after.a1) > 1e-9;
+  const bool coeffs_changed = std::abs(before.b0 - after.b0) > 1e-9 ||
+                              std::abs(before.b1 - after.b1) > 1e-9 ||
+                              std::abs(before.a1 - after.a1) > 1e-9;
   EXPECT_TRUE(coeffs_changed);
 }
 
@@ -263,10 +264,11 @@ TEST(BassBoostFilterTest, DcGainIncreasesWithGainDb) {
   low_filter.SetGainDb(kLowGain);
   high_filter.SetGainDb(kGain12dB);
 
-  const auto dc = [](const BiquadCoeffs& c) {
-    return (c.b0 + c.b1 + c.b2) / (1.0 + c.a1 + c.a2);
+  const auto dc_gain = [](const BiquadCoeffs& coeffs) {
+    return (coeffs.b0 + coeffs.b1 + coeffs.b2) / (1.0 + coeffs.a1 + coeffs.a2);
   };
-  EXPECT_GT(dc(high_filter.coefficients()), dc(low_filter.coefficients()));
+  EXPECT_GT(dc_gain(high_filter.coefficients()),
+            dc_gain(low_filter.coefficients()));
 }
 
 // Changing frequency should alter coefficients.
