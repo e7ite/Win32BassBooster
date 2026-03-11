@@ -370,3 +370,225 @@ void StopClientsAndFinalizeTask(IAudioClient* capture_client,
 }  // namespace
 ```
 
+### Naming
+- Names should be clear (unambiguous about what it refers to) and precise
+  (unambiguous about what it does not refer to). Longer is usually better than
+  shorter, but stop adding words once those goals are met.
+- Do not use generic module or library names like `utils`, `helpers`, or
+  `common`. Name modules by their concrete responsibility.
+- Prefer specific names over vague filler words such as `result`, `value`,
+  `data`, `status`, `helper`, `utils`, or `manager`.
+- Do not use abbreviations like `I` or `iface` in interface-related names.
+- Prefer removing redundant type words entirely when surrounding context already
+  makes the type clear. `processor` is better than `processor_interface`.
+- If a use site starts sounding repetitive (`capture.capture_audio_client`),
+  rename one side so the repeated concept appears only once. Prefer removing
+  redundant words over introducing abbreviations.
+- For test doubles, do not encode the double type in variable names when the
+  type already makes that clear. Name by role.
+- A type name must cover all of its members, not just a subset. If the name
+  only describes one member and the rest need "and" to explain, the name is
+  too narrow.
+
+```cpp
+// Bad: struct holds a device, an enumerator, a name, and a status,
+// but the name only describes the device.
+struct DefaultEndpoint {
+  Status status;
+  ScopedComPtr<IMMDeviceEnumerator> enumerator;
+  ScopedComPtr<IMMDevice> render_device;
+  std::wstring endpoint_name;
+};
+
+// Good: name covers the whole bundle.
+struct EndpointAcquisition {
+  Status status;
+  ScopedComPtr<IMMDeviceEnumerator> enumerator;
+  ScopedComPtr<IMMDevice> render_device;
+  std::wstring endpoint_name;
+};
+```
+
+- Omit words clear from surrounding context:
+
+```cpp
+// Bad.
+class IAudioSink {
+};
+std::unique_ptr<ProcessorInterface> processor_interface;
+std::unique_ptr<ProcessorInterface> processor_iface;
+HRESULT result = S_OK;
+
+// Good.
+class AudioSink {
+};
+std::unique_ptr<Processor> processor;
+HRESULT render_start = S_OK;
+CaptureSetupState& setup = ...;
+setup.capture_audio_client.reset();
+
+// Bad.
+MockAudioEngine mock_audio_engine;
+CaptureSetupState& capture = ...;
+capture.capture_audio_client.reset();
+
+// Good.
+MockAudioEngine audio_engine;
+```
+
+### Local variables
+- Introduce a local variable only when its name adds clarity, it factors out a
+  repeated expression, or it must live across statements.
+- Avoid single-use temporary variables whose names add no information.
+
+```cpp
+// Bad: generic single-use variable.
+const uint32_t value = capacity - used;
+if (value < requested) {
+  return;
+}
+
+// Good: name carries meaning.
+const uint32_t available = capacity - used;
+if (available < requested) {
+  return;
+}
+```
+
+### Lifetime and value storage
+- Never store a `const T&` member from a constructor parameter. It can bind to
+  temporaries and leave a dangling reference.
+- Prefer the simplest storage that satisfies lifetime and ownership:
+  bare object -> `std::optional<T>` when absence is real ->
+  `std::unique_ptr<T>` when indirection or ownership transfer is required.
+- Prefer smart pointers over owning raw pointers for heap objects. Ownership
+  and ownership transfer should be visible in the type system so callers and
+  reviewers can verify them by local inspection.
+- Default to `std::make_unique<T>(...)` for heap allocation. Avoid
+  `std::unique_ptr<T>(new T(...))` and `ptr.reset(new T(...))` when
+  `std::make_unique` expresses the same intent.
+- When legacy code returns ownership via `T*`, wrap it in a smart pointer
+  immediately. When legacy code accepts ownership via `T*`, keep ownership in
+  a smart pointer until that boundary.
+- If ownership is moving between project types that already use
+  `std::unique_ptr`, move the smart pointer directly. Do not `release()` and
+  re-wrap just to transfer ownership.
+- Use `release()` only at a real raw-pointer ownership boundary that cannot
+  accept a smart pointer. If the next owner is another smart pointer in
+  project code, redesign the handoff to use `std::move`.
+
+```cpp
+// Bad: stored reference may dangle if constructed from a temporary.
+class Foo {
+ public:
+  explicit Foo(const std::string& text) : text_(text) {}
+
+ private:
+  const std::string& text_;
+};
+
+// Good: own storage directly.
+class Foo {
+ public:
+  explicit Foo(std::string text) : text_(std::move(text)) {}
+
+ private:
+  std::string text_;
+};
+```
+
+```cpp
+// Bad: redundant raw `new`.
+std::unique_ptr<Widget> widget(new Widget(config));
+
+// Good: direct heap allocation with ownership in the type.
+auto widget = std::make_unique<Widget>(config);
+```
+
+```cpp
+// Bad: unwrap and re-wrap ownership between smart pointers.
+owner_.reset(tmp.release());
+
+// Good: move ownership directly.
+owner_ = std::move(tmp);
+```
+
+```cpp
+// Good: wrap legacy raw ownership immediately.
+std::unique_ptr<Widget> widget(CreateOwnedWidget());
+```
+
+```cpp
+// Good: build replacement resources locally, then move them into members only
+// after the full setup succeeds.
+SetupState setup;
+if (const Status setup_status = BuildSetup(setup); !setup_status.ok()) {
+  return setup_status;
+}
+audio_client_ = std::move(setup.audio_client);
+format_ = std::move(setup.format);
+```
+
+### Sentinel values
+- Do not encode missing or invalid states as magic values (`-1`, `INT_MIN`,
+  `NaN`). Use `std::optional<T>` for absence or an error-carrying result type
+  when error details are needed.
+
+```cpp
+// Bad: sentinel in value domain.
+int AccountBalance();  // returns -5 when account is closed.
+
+// Good: absence is explicit.
+std::optional<int> AccountBalance();
+```
+
+### Avoid brittle parameters
+- Prefer typed parameters over strings or raw integers for values that control
+  behavior. Strings used as mode selectors fail silently on typos, case
+  mismatches, and trailing spaces.
+- Reserve strings for data that genuinely originates as text (for example, file
+  paths and user-visible labels).
+- If an integer is acting as a mode selector, replace it with an enum or a
+  named constant.
+
+```cpp
+// Bad: typo "enabeld" compiles and silently does nothing.
+void SetMode(const std::string& mode);  // "enabled" / "disabled"
+
+// Good: wrong value is a compile error.
+enum class Mode { kEnabled, kDisabled };
+void SetMode(Mode mode);
+
+// Also good for binary flags.
+void SetEnabled(bool enabled);
+```
+
+### Strings and API boundaries
+- Prefer `std::string_view` and `std::wstring_view` for read-only inputs.
+- Prefer `std::string` and `std::wstring` for owned storage.
+- Avoid raw `const char*` and `const wchar_t*` in project interfaces.
+- When a platform API requires a NUL-terminated string, pass `c_str()` from an
+  owning string.
+- Do not rely on `string_view::data()` for NUL termination.
+
+```cpp
+// Bad: raw pointers in project interface.
+void SetEndpointName(const wchar_t* name);
+
+// Good: project interface uses string_view.
+void SetEndpointName(std::wstring_view name);
+```
+
+```cpp
+// Bad: data() from string_view may not be NUL-terminated.
+void OpenDevice(std::wstring_view endpoint_id) {
+  ::OpenEndpoint(endpoint_id.data());
+}
+
+// Good: build an owning string, then pass c_str().
+void OpenDevice(std::wstring_view endpoint_id) {
+  const std::wstring endpoint_id_str(endpoint_id);
+  ::OpenEndpoint(endpoint_id_str.c_str());
+}
+```
+
