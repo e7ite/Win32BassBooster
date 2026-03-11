@@ -162,6 +162,13 @@ if(WIN32)
         endpoint_audio_format bass_boost_filter harmonic_exciter
         ole32 oleaut32 uuid avrt)
     target_enable_clang_tidy(audio_pipeline)
+
+    add_library(main_window STATIC src/main_window.cpp)
+    target_include_directories(main_window PUBLIC src)
+    target_link_libraries(main_window PUBLIC
+        audio_pipeline theme_manager
+        uxtheme dwmapi winmm comctl32)
+    target_enable_clang_tidy(main_window)
 endif()
 
 # -----------------------------------------------------------------------
@@ -211,5 +218,13 @@ if(BUILD_TESTS)
         add_test(NAME theme_manager_test
                  COMMAND $<TARGET_FILE:theme_manager_test> --gtest_color=yes)
         target_enable_clang_tidy(theme_manager_test)
+
+        add_executable(main_window_test src/main_window_test.cpp)
+        target_link_libraries(main_window_test PRIVATE
+            main_window GTest::gtest_main)
+        target_include_directories(main_window_test PRIVATE src)
+        add_test(NAME main_window_test
+                 COMMAND $<TARGET_FILE:main_window_test> --gtest_color=yes)
+        target_enable_clang_tidy(main_window_test)
     endif()
 endif()
