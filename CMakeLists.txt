@@ -119,3 +119,30 @@ if(BUILD_TESTS)
     include(CTest)
     include(GoogleTest)
 endif()
+
+# -----------------------------------------------------------------------
+# DSP static libraries  (cross-platform)
+# -----------------------------------------------------------------------
+add_library(bass_boost_filter STATIC src/bass_boost_filter.cpp)
+target_include_directories(bass_boost_filter PUBLIC src)
+if(MSVC)
+    target_compile_options(bass_boost_filter PRIVATE
+        $<$<NOT:$<CONFIG:Debug>>:/O2>)
+else()
+    target_compile_options(bass_boost_filter PRIVATE -O2)
+endif()
+target_enable_clang_tidy(bass_boost_filter)
+
+# -----------------------------------------------------------------------
+# Tests
+# -----------------------------------------------------------------------
+if(BUILD_TESTS)
+    # --- Cross-platform DSP tests ---
+    add_executable(bass_boost_filter_test src/bass_boost_filter_test.cpp)
+    target_link_libraries(bass_boost_filter_test PRIVATE
+        bass_boost_filter GTest::gtest_main)
+    target_include_directories(bass_boost_filter_test PRIVATE src)
+    add_test(NAME bass_boost_filter_test
+             COMMAND $<TARGET_FILE:bass_boost_filter_test> --gtest_color=yes)
+    target_enable_clang_tidy(bass_boost_filter_test)
+endif()
