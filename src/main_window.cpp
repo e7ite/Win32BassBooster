@@ -171,11 +171,11 @@ void PaintSliderLabel(HDC hdc, const PaintContext& ctx) {
   cent_rc.left += kLabelColW;
   cent_rc.right -= kLabelColW;
 
-  DrawTextW(hdc, L"MORE BASS", -1, &left_rc,
-            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  DrawTextW(hdc, L"FLAT", -1, &left_rc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   DrawTextW(hdc, L"BASS BOOST", -1, &cent_rc,
             DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  DrawTextW(hdc, L"FLAT", -1, &right_rc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+  DrawTextW(hdc, L"MORE BASS", -1, &right_rc,
+            DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
   SelectObject(hdc, old_f);
   DeleteObject(font);
@@ -247,8 +247,8 @@ bool RegisterMainWindowClass(HINSTANCE instance, const MainWindowParams& params,
 
 double SliderPositionToBoostLevel(int slider_pos,
                                   const MainWindowParams& params) {
-  return 1.0 - (static_cast<double>(slider_pos) /
-                static_cast<double>(params.slider_max));
+  return static_cast<double>(slider_pos) /
+         static_cast<double>(params.slider_max);
 }
 
 }  // namespace
@@ -378,7 +378,7 @@ void MainWindow::OnCreate(HWND hwnd) {
                kMainWindowParams.slider_min);
   SendMessageW(slider_hwnd_, TBM_SETRANGEMAX, FALSE,
                kMainWindowParams.slider_max);
-  SendMessageW(slider_hwnd_, TBM_SETPOS, TRUE, kMainWindowParams.slider_max);
+  SendMessageW(slider_hwnd_, TBM_SETPOS, TRUE, kMainWindowParams.slider_min);
   SendMessageW(slider_hwnd_, TBM_SETPAGESIZE, /*wParam=*/0,
                kMainWindowParams.slider_max / kSliderPageDivisor);
 

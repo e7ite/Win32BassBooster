@@ -122,7 +122,7 @@ TEST_F(MainWindowLiveTest, SliderHandleIsValid) {
   EXPECT_NE(IsWindow(window_->slider_hwnd()), FALSE);
 }
 
-TEST_F(MainWindowLiveTest, SliderAtMinSetsMaxBoost) {
+TEST_F(MainWindowLiveTest, SliderAtMinSetsZeroBoost) {
   ASSERT_TRUE(window_created_);
 
   HWND slider = window_->slider_hwnd();
@@ -135,11 +135,11 @@ TEST_F(MainWindowLiveTest, SliderAtMinSetsMaxBoost) {
                MAKEWPARAM(TB_THUMBPOSITION, slider_min),
                reinterpret_cast<LPARAM>(slider));
 
-  // Slider at min (leftmost) maps to maximum boost (level ~= 1.0).
-  EXPECT_NEAR(pipeline_observer_->last_boost_level_, 1.0, 1e-6);
+  // Slider at min (leftmost) maps to zero boost (level ~= 0.0).
+  EXPECT_NEAR(pipeline_observer_->last_boost_level_, 0.0, 1e-6);
 }
 
-TEST_F(MainWindowLiveTest, SliderAtMaxSetsZeroBoost) {
+TEST_F(MainWindowLiveTest, SliderAtMaxSetsMaxBoost) {
   ASSERT_TRUE(window_created_);
 
   HWND slider = window_->slider_hwnd();
@@ -152,8 +152,8 @@ TEST_F(MainWindowLiveTest, SliderAtMaxSetsZeroBoost) {
                MAKEWPARAM(TB_THUMBPOSITION, slider_max),
                reinterpret_cast<LPARAM>(slider));
 
-  // Slider at max (rightmost) maps to zero boost (level ~= 0.0).
-  EXPECT_NEAR(pipeline_observer_->last_boost_level_, 0.0, 1e-6);
+  // Slider at max (rightmost) maps to maximum boost (level ~= 1.0).
+  EXPECT_NEAR(pipeline_observer_->last_boost_level_, 1.0, 1e-6);
 }
 
 }  // namespace

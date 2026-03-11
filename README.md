@@ -328,7 +328,7 @@ passband or stopband.
 square-root curve:
 
 ```cpp
-gain_db = kMaxGainDb * sqrt(1.0 - p);  // p=0 -> 15 dB, p=1 -> 0 dB
+gain_db = kMaxGainDb * sqrt(p);  // p=0 -> 0 dB, p=1 -> 15 dB
 ```
 
 The square-root curve is convex: at the midpoint of slider travel you get
