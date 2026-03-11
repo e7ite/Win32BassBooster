@@ -1,5 +1,7 @@
-// Verifies loopback capture activation succeeds with COM initialized,
-// returns a usable audio client, and reports a clear error without COM.
+// Verifies the two externally visible contracts of loopback activation:
+// success with COM initialized, and failure without COM initialized. Each
+// test checks the full returned status rather than splitting one call into
+// several narrower tests.
 
 #include "loopback_capture_activation.hpp"
 
@@ -9,7 +11,24 @@
 
 #include "gtest/gtest.h"
 
+TEST(LoopbackCaptureActivationTest, FailsWithoutComInitialization) {
+  // Without COM initialization, activation must fail and fully describe that
+  // failure through the returned status object.
+  IAudioClient* client = nullptr;
+
+  const AudioPipelineInterface::Status status =
+      ActivateLoopbackCaptureClient(client);
+
+  ASSERT_FALSE(status.ok());
+  EXPECT_EQ(client, nullptr);
+  EXPECT_TRUE(FAILED(status.code));
+  EXPECT_FALSE(status.error_message.empty());
+  EXPECT_NE(status.error_message.find(L"0x"), std::wstring::npos);
+}
+
 TEST(LoopbackCaptureActivationTest, SucceedsWithComInitialized) {
+  // Keep COM setup and teardown explicit in the test body so the lifetime is
+  // obvious and there is no helper logic hiding cleanup behavior.
   const HRESULT com_init =
       CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
   ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
@@ -19,86 +38,11 @@ TEST(LoopbackCaptureActivationTest, SucceedsWithComInitialized) {
   const AudioPipelineInterface::Status status =
       ActivateLoopbackCaptureClient(client);
 
-  EXPECT_TRUE(status.ok());
-  EXPECT_NE(client, nullptr);
-
-  if (client != nullptr) {
-    client->Release();
-  }
-
-  CoUninitialize();
-}
-
-TEST(LoopbackCaptureActivationTest, ReturnsNonEmptyErrorMessageOnFailure) {
-  // Without COM initialization, activation must fail and produce a
-  // human-readable error message containing the hex HRESULT.
-  CoUninitialize();
-
-  IAudioClient* client = nullptr;
-
-  const AudioPipelineInterface::Status status =
-      ActivateLoopbackCaptureClient(client);
-
-  if (!status.ok()) {
-    EXPECT_FALSE(status.error_message.empty());
-    EXPECT_NE(status.error_message.find(L"0x"), std::wstring::npos);
-  }
-
-  // Clean up in case it unexpectedly succeeded.
-  if (client != nullptr) {
-    client->Release();
-  }
-}
-
-TEST(LoopbackCaptureActivationTest, ClientIsNullOnFailure) {
-  CoUninitialize();
-
-  IAudioClient* client = nullptr;
-
-  const AudioPipelineInterface::Status status =
-      ActivateLoopbackCaptureClient(client);
-
-  if (!status.ok()) {
-    EXPECT_EQ(client, nullptr);
-  }
-
-  if (client != nullptr) {
-    client->Release();
-  }
-}
-
-TEST(LoopbackCaptureActivationTest, StatusCodeIsFailureHresultOnError) {
-  CoUninitialize();
-
-  IAudioClient* client = nullptr;
-
-  const AudioPipelineInterface::Status status =
-      ActivateLoopbackCaptureClient(client);
-
-  if (!status.ok()) {
-    EXPECT_TRUE(FAILED(status.code));
-  }
-
-  if (client != nullptr) {
-    client->Release();
-  }
-}
-
-TEST(LoopbackCaptureActivationTest, SuccessStatusCodeIsSok) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
-
-  IAudioClient* client = nullptr;
-
-  const AudioPipelineInterface::Status status =
-      ActivateLoopbackCaptureClient(client);
-
+  ASSERT_TRUE(status.ok());
   EXPECT_EQ(status.code, S_OK);
+  ASSERT_NE(client, nullptr);
 
-  if (client != nullptr) {
-    client->Release();
-  }
+  client->Release();
 
   CoUninitialize();
 }

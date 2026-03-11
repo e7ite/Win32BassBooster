@@ -933,6 +933,106 @@ TEST(ToneFilterTest, ControlAtOneSetsZeroLevel) {
   a test into a helper that the reader must chase.
 - If testing an API requires large amounts of boilerplate, treat that as an API
   usability signal, not a reason to add more test infrastructure.
+- Tests must be order-independent. Every test must pass when run alone, first,
+  last, or under shuffled execution.
+- Do not rely on ambient state left behind by another test, such as COM
+  initialization, current working directory, environment variables, message
+  queues, temp files, registry state, singletons, or static mutable caches.
+
+```cpp
+// Bad: second test only passes because another test initialized COM first.
+TEST(LoopbackCaptureActivationTest, ActivationSucceeds) {
+  IAudioClient* client = nullptr;
+  EXPECT_TRUE(ActivateLoopbackCaptureClient(client).ok());
+}
+
+// Good: the test owns the state it needs.
+TEST(LoopbackCaptureActivationTest, ActivationSucceeds) {
+  const HRESULT com_init =
+      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
+  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
+
+  IAudioClient* client = nullptr;
+  ASSERT_TRUE(ActivateLoopbackCaptureClient(client).ok());
+  ASSERT_NE(client, nullptr);
+
+  client->Release();
+  CoUninitialize();
+}
+```
+
+- If a test changes process-wide, thread-local, or OS resource state, the same
+  test or fixture that set it up must restore it.
+- Never call teardown APIs for state the test did not create. "Resetting" the
+  environment by blindly calling cleanup functions is brittle because it depends
+  on unknown prior state.
+
+```cpp
+// Bad: tries to force a failure path by tearing down unknown ambient state.
+TEST(LoopbackCaptureActivationTest, FailsWithoutCom) {
+  CoUninitialize();
+  ...
+}
+
+// Good: failure path is exercised without mutating unrelated test state.
+TEST(LoopbackCaptureActivationTest, FailsWithoutCom) {
+  IAudioClient* client = nullptr;
+  const AudioPipelineInterface::Status status =
+      ActivateLoopbackCaptureClient(client);
+  ASSERT_FALSE(status.ok());
+}
+```
+
+- Avoid brittle synchronization and test-only control flow. Do not add sleeps,
+  wall-clock waits, random behavior, or complex helper runtimes to make a test
+  pass.
+- Prefer direct, deterministic triggers (`SendMessageW`, explicit inputs, fixed
+  seeds when unavoidable) and explicit cleanup in the test body or fixture.
+- If a test helper starts needing branches, threads, promises, retries, or
+  hidden cleanup, simplify the test coverage or extract a better production seam
+  instead of building a mini runtime in `_test.cpp`.
+- Do not add logic to tests unless it is absolutely unavoidable. If it seems
+  unavoidable, ask before adding it.
+- If a test needs branches, loops, retries, conditional cleanup, or helper
+  runtimes to express one scenario, simplify the test or extract a better
+  production seam instead. Otherwise the test starts needing validation of its
+  own and becomes brittle.
+
+```cpp
+// Bad: helper complexity starts to dominate the test story.
+ActivationResult RunOnWorkerThread(bool initialize_com, int retry_count);
+
+// Good: the test drives one deterministic scenario directly.
+SendMessageW(window.hwnd(), WM_HSCROLL, ..., ...);
+EXPECT_NEAR(pipeline.last_boost_level(), 0.5, 1e-6);
+```
+
+```cpp
+// Bad: the test contains its own control flow and conditional cleanup.
+TEST(LoopbackCaptureActivationTest, FailureStatusHasMessage) {
+  IAudioClient* client = nullptr;
+  const AudioPipelineInterface::Status status =
+      ActivateLoopbackCaptureClient(client);
+
+  if (!status.ok()) {
+    EXPECT_FALSE(status.error_message.empty());
+  }
+
+  if (status.ok() && client != nullptr) {
+    client->Release();
+  }
+}
+
+// Good: the test states the contract directly.
+TEST(LoopbackCaptureActivationTest, FailureStatusHasMessage) {
+  IAudioClient* client = nullptr;
+  const AudioPipelineInterface::Status status =
+      ActivateLoopbackCaptureClient(client);
+
+  ASSERT_FALSE(status.ok());
+  EXPECT_FALSE(status.error_message.empty());
+}
+```
 
 ### Working with lint rules and tests
 - After every code change, fix all clang-tidy warnings and clang-format errors
