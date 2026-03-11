@@ -310,8 +310,10 @@ right = handle(right_input);
 ```
 
 ### Refactoring behavior
-- Remove dead state, stale flags, and obsolete branches during the same
-  refactor.
+- Never leave dead code in the codebase. Remove unreachable functions,
+  unused variables, stale flags, obsolete branches, and any code that is
+  defined but never called. Do this in the same change that makes it dead,
+  not in a follow-up.
 - Minimize scope at every level. Keep logic in the narrowest scope that works:
   local variable -> anonymous namespace -> `private` member ->
   `public` member or free function in a header. Promote scope only when
@@ -643,6 +645,8 @@ void OpenDevice(std::wstring_view endpoint_id) {
 ```
 
 ### Commits
+- Every commit must build and pass all existing and new tests. Do not commit
+  code that breaks the build or causes test failures, even temporarily.
 - Keep commits small and single-purpose (target: <=100 changed lines when
   practical).
 - Include corresponding tests in the same commit as behavior changes.
