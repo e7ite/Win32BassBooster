@@ -90,9 +90,8 @@ class AudioPipeline final : public AudioPipelineInterface {
   // Exposes the render buffer that receives processed stereo float frames.
   ComPtr<IAudioRenderClient> audio_render_client_;
 
-  // Owns the loopback mix format with the required `CoTaskMemFree` cleanup.
-  std::unique_ptr<WAVEFORMATEX, CoTaskMemFreeDeleter> capture_format_;
   // Owns the render mix format with the required `CoTaskMemFree` cleanup.
+  // Process loopback captures in the render format, so this serves both paths.
   std::unique_ptr<WAVEFORMATEX, CoTaskMemFreeDeleter> render_format_;
 
   // These DSP stages are applied in sequence on every audio buffer.

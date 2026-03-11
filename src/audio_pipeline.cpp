@@ -21,6 +21,7 @@
 #include "bass_boost_filter.hpp"
 #include "endpoint_audio_format.hpp"
 #include "harmonic_exciter.hpp"
+#include "loopback_capture_activation.hpp"
 
 namespace {
 
@@ -111,16 +112,23 @@ void StopClientsAndFinalizeIfReady(IAudioClient* capture_audio_client,
   return S_OK;
 }
 
-// Runs the full DSP chain in-place: harmonic exciter, then bass boost filter,
-// then per-sample tanh soft limiter.
-void ApplyDspChain(std::span<float> pcm_buf, HarmonicExciter& exciter,
+// Applies the bass boost filter in-place, then attenuates by the square root
+// of the linear gain so bass peaks stay near full scale while mids and highs
+// drop proportionally. At 12 dB boost the linear gain is ~4x, so
+// output_gain = 1/sqrt(4) = 0.5: bass ends up ~2x louder, mids drop to 0.5x,
+// and bass is 12 dB louder than mids - the "YouTube bass boost" sound.
+void ApplyDspChain(std::span<float> pcm_buf, HarmonicExciter& /*exciter*/,
                    BassBoostFilter& filter) {
-  exciter.ProcessStereo(pcm_buf);
   filter.ProcessStereo(pcm_buf);
-  // Soft-limit: tanh is transparent near 0, compresses above 0.7 without
-  // hard-clipping; eliminates pops/crackle at max boost.
+
+  const double gain_db = filter.gain_db();
+  const float output_gain =
+      gain_db > 0.0
+          ? static_cast<float>(1.0 / std::sqrt(std::pow(10.0, gain_db / 20.0)))
+          : 1.0F;
+
   for (float& sample : pcm_buf) {
-    sample = std::tanh(sample);
+    sample = std::clamp(sample * output_gain, -1.0F, 1.0F);
   }
 }
 
@@ -171,12 +179,16 @@ struct CapturedPacket {
   DWORD flags;
 };
 
-// Decodes one captured packet to stereo float, applies the DSP chain, and
-// writes the result to the render client. Returns `S_OK` on success or when
-// the packet is silent/empty; otherwise returns the failing HRESULT.
+// Decodes one captured packet to stereo float, applies only the bass boost
+// filter, then subtracts the original so only the low-frequency energy the
+// filter added is rendered. The low-shelf filter leaves highs unchanged, so
+// filter(signal) - signal is zero above the shelf and positive in the bass
+// range. This avoids comb filtering on mids/highs that would result from
+// rendering a delayed full-band copy. Returns `S_OK` on success or when the
+// packet is silent/empty; otherwise returns the failing HRESULT.
 [[nodiscard]] HRESULT ProcessCapturedPacket(
     const CapturedPacket& packet, const WAVEFORMATEX& capture_format,
-    HarmonicExciter& exciter, BassBoostFilter& filter,
+    HarmonicExciter& /*exciter*/, BassBoostFilter& filter,
     IAudioClient& audio_client, IAudioRenderClient& audio_render_client) {
   const bool should_process_packet =
       (packet.flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0 && packet.frames > 0;
@@ -187,7 +199,18 @@ struct CapturedPacket {
   endpoint_audio_format::StereoPcmBuffer buf =
       endpoint_audio_format::DecodeToStereoFloat(packet.bytes, packet.frames,
                                                  capture_format);
-  ApplyDspChain(buf.samples, exciter, filter);
+
+  const std::vector<float> original(buf.samples.begin(), buf.samples.end());
+
+  // Apply only the filter — no output attenuation. Process loopback prevents
+  // feedback, so attenuation is unnecessary. The delta below isolates just the
+  // bass energy the shelf added.
+  filter.ProcessStereo(buf.samples);
+
+  for (size_t i = 0; i < buf.samples.size(); ++i) {
+    buf.samples[i] = std::clamp(buf.samples[i] - original[i], -1.0F, 1.0F);
+  }
+
   return WriteProcessedToRender(buf.samples, audio_client, audio_render_client);
 }
 
@@ -220,13 +243,16 @@ struct CapturedPacket {
   return AudioPipelineInterface::Status::Ok();
 }
 
-// Initializes the audio client in shared loopback mode for capture. Returns
-// `Ok` on success; otherwise returns the failing HRESULT.
+// Initializes the audio client in shared mode for loopback capture. The
+// process loopback activation selects which audio is captured, but the stream
+// flag `AUDCLNT_STREAMFLAGS_LOOPBACK` is still required. Buffer duration 0
+// lets WASAPI choose the optimal size for process loopback. Returns `Ok` on
+// success; otherwise returns the failing HRESULT.
 [[nodiscard]] AudioPipelineInterface::Status InitializeCaptureClient(
     IAudioClient& audio_client, WAVEFORMATEX* capture_format) {
   if (const HRESULT initialize_capture = audio_client.Initialize(
           AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
-          /*hnsBufferDuration=*/k20Ms,
+          /*hnsBufferDuration=*/0,
           /*hnsPeriodicity=*/0, capture_format,
           /*audioSessionGuid=*/nullptr);
       FAILED(initialize_capture)) {
@@ -254,9 +280,8 @@ struct CapturedPacket {
   return AudioPipelineInterface::Status::Ok();
 }
 
-// Initializes the capture client in loopback mode and acquires its capture
-// service in one step. Returns `Ok` on success; otherwise returns the first
-// failing status.
+// Initializes the capture client and acquires its capture service in one step.
+// Returns `Ok` on success; otherwise returns the first failing status.
 [[nodiscard]] AudioPipelineInterface::Status InitializeCaptureStream(
     IAudioClient& audio_client, WAVEFORMATEX* capture_format,
     IAudioCaptureClient*& raw_audio_capture_client) {
@@ -359,41 +384,27 @@ struct EndpointAcquisition {
 struct CaptureClientSetup {
   ScopedComPtr<IAudioClient> audio_client;
   ScopedComPtr<IAudioCaptureClient> audio_capture_client;
-  ScopedWaveFormat capture_format;
 };
 
-// Activates a loopback capture client on `render_device`, queries the mix
-// format, and initializes the capture stream. Populates `setup` on success;
-// returns the first failing status otherwise.
+// Activates a loopback capture client using the process loopback API and
+// initializes it with `render_format`. The process loopback virtual device
+// has no mix format of its own; it captures in whatever format the render
+// endpoint uses. Populates `setup` on success; returns the first failing
+// status otherwise.
 [[nodiscard]] AudioPipelineInterface::Status SetupCaptureClient(
-    IMMDevice& render_device, CaptureClientSetup& setup) {
+    WAVEFORMATEX* render_format, CaptureClientSetup& setup) {
   IAudioClient* raw_capture = nullptr;
-  // COM expects a generic void** out-parameter. This cast is safe because
-  // `Activate` only writes an interface pointer value for the requested IID
-  // into `raw_capture`; it does not dereference through void**.
-  if (const HRESULT activate_capture =
-          render_device.Activate(__uuidof(IAudioClient), CLSCTX_ALL,
-                                 /*pActivationParams=*/nullptr,
-                                 reinterpret_cast<void**>(&raw_capture));
-      FAILED(activate_capture)) {
-    return AudioPipelineInterface::Status::Error(
-        activate_capture, L"Activate capture IAudioClient failed");
+  if (const AudioPipelineInterface::Status activate =
+          ActivateLoopbackCaptureClient(raw_capture);
+      !activate.ok()) {
+    return activate;
   }
   setup.audio_client.reset(raw_capture);
 
-  WAVEFORMATEX* raw_capture_format = nullptr;
-  if (const HRESULT capture_mix_format =
-          setup.audio_client->GetMixFormat(&raw_capture_format);
-      FAILED(capture_mix_format)) {
-    return AudioPipelineInterface::Status::Error(
-        capture_mix_format, L"GetMixFormat (capture) failed");
-  }
-  setup.capture_format.reset(raw_capture_format);
-
   IAudioCaptureClient* raw_client = nullptr;
   if (const AudioPipelineInterface::Status capture_stream =
-          InitializeCaptureStream(*setup.audio_client,
-                                  setup.capture_format.get(), raw_client);
+          InitializeCaptureStream(*setup.audio_client, render_format,
+                                  raw_client);
       !capture_stream.ok()) {
     return capture_stream;
   }
@@ -461,19 +472,20 @@ struct StreamClientSetup {
   RenderClientSetup render;
 };
 
-// Returns `Ok` when both capture and render clients are ready; returns the
-// first failing status otherwise.
+// Sets up the render client first (to obtain the mix format), then activates
+// the process loopback capture client using that same format. Returns `Ok`
+// when both clients are ready; returns the first failing status otherwise.
 [[nodiscard]] AudioPipelineInterface::Status SetupStreamClients(
     IMMDevice& render_device, StreamClientSetup& clients) {
-  if (const AudioPipelineInterface::Status capture =
-          SetupCaptureClient(render_device, clients.capture);
-      !capture.ok()) {
-    return capture;
-  }
   if (const AudioPipelineInterface::Status render =
           SetupRenderClient(render_device, clients.render);
       !render.ok()) {
     return render;
+  }
+  if (const AudioPipelineInterface::Status capture = SetupCaptureClient(
+          clients.render.render_format.get(), clients.capture);
+      !capture.ok()) {
+    return capture;
   }
   return AudioPipelineInterface::Status::Ok();
 }
@@ -482,7 +494,7 @@ struct ActiveStreamState {
   IAudioClient* audio_client;
   IAudioCaptureClient* audio_capture_client;
   IAudioRenderClient* audio_render_client;
-  WAVEFORMATEX* capture_format;
+  WAVEFORMATEX* format;
   HarmonicExciter& exciter;
   BassBoostFilter& filter;
 };
@@ -492,9 +504,8 @@ struct ActiveStreamState {
 // requested; otherwise returns the first failing HRESULT.
 [[nodiscard]] HRESULT DrainCaptureQueue(ActiveStreamState& stream,
                                         std::stop_token stoken) {
-  if (stream.audio_capture_client == nullptr ||
-      stream.capture_format == nullptr || stream.audio_client == nullptr ||
-      stream.audio_render_client == nullptr) {
+  if (stream.audio_capture_client == nullptr || stream.format == nullptr ||
+      stream.audio_client == nullptr || stream.audio_render_client == nullptr) {
     return E_POINTER;
   }
 
@@ -519,7 +530,7 @@ struct ActiveStreamState {
     const CapturedPacket packet{
         .bytes = capture_bytes, .frames = frames, .flags = flags};
     if (const HRESULT process_packet = ProcessCapturedPacket(
-            packet, *stream.capture_format, stream.exciter, stream.filter,
+            packet, *stream.format, stream.exciter, stream.filter,
             *stream.audio_client, *stream.audio_render_client);
         FAILED(process_packet)) {
       stream.audio_capture_client->ReleaseBuffer(frames);
@@ -542,7 +553,6 @@ struct RunningPipelineState {
   ScopedComPtr<IAudioClient>& render_audio_client;
   ScopedComPtr<IAudioCaptureClient>& audio_capture_client;
   ScopedComPtr<IAudioRenderClient>& audio_render_client;
-  ScopedWaveFormat& capture_format;
   ScopedWaveFormat& render_format;
   BassBoostFilter& filter;
   HarmonicExciter& exciter;
@@ -579,7 +589,7 @@ struct RunningPipelineState {
   }
 
   const double sample_rate =
-      static_cast<double>(clients.capture.capture_format->nSamplesPerSec);
+      static_cast<double>(clients.render.render_format->nSamplesPerSec);
   state.filter.SetSampleRate(sample_rate);
   state.exciter.SetSampleRate(sample_rate);
 
@@ -588,7 +598,6 @@ struct RunningPipelineState {
   state.endpoint_name = std::move(endpoint.endpoint_name);
   state.capture_audio_client = std::move(clients.capture.audio_client);
   state.audio_capture_client = std::move(clients.capture.audio_capture_client);
-  state.capture_format = std::move(clients.capture.capture_format);
   state.render_audio_client = std::move(clients.render.audio_client);
   state.audio_render_client = std::move(clients.render.audio_render_client);
   state.render_format = std::move(clients.render.render_format);
@@ -644,7 +653,7 @@ void RunAudioThreadLoop(RunningPipelineState& state, std::stop_token stoken) {
         .audio_client = state.render_audio_client.get(),
         .audio_capture_client = state.audio_capture_client.get(),
         .audio_render_client = state.audio_render_client.get(),
-        .capture_format = state.capture_format.get(),
+        .format = state.render_format.get(),
         .exciter = state.exciter,
         .filter = state.filter};
 
@@ -697,7 +706,7 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
   }
 
   const double sample_rate =
-      static_cast<double>(clients.capture.capture_format->nSamplesPerSec);
+      static_cast<double>(clients.render.render_format->nSamplesPerSec);
   filter_.SetSampleRate(sample_rate);
   exciter_.SetSampleRate(sample_rate);
 
@@ -708,7 +717,6 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
   }
   capture_audio_client_ = std::move(clients.capture.audio_client);
   audio_capture_client_ = std::move(clients.capture.audio_capture_client);
-  capture_format_ = std::move(clients.capture.capture_format);
   render_audio_client_ = std::move(clients.render.audio_client);
   audio_render_client_ = std::move(clients.render.audio_render_client);
   render_format_ = std::move(clients.render.render_format);
@@ -722,7 +730,6 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
                                .render_audio_client = render_audio_client_,
                                .audio_capture_client = audio_capture_client_,
                                .audio_render_client = audio_render_client_,
-                               .capture_format = capture_format_,
                                .render_format = render_format_,
                                .filter = filter_,
                                .exciter = exciter_,

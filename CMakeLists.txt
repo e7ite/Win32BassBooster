@@ -156,11 +156,19 @@ if(WIN32)
     target_link_libraries(theme_manager PUBLIC dwmapi uxtheme)
     target_enable_clang_tidy(theme_manager)
 
+    add_library(loopback_capture_activation STATIC
+        src/loopback_capture_activation.cpp)
+    target_include_directories(loopback_capture_activation PUBLIC src)
+    target_link_libraries(loopback_capture_activation PUBLIC
+        ole32 oleaut32 uuid mmdevapi)
+    target_enable_clang_tidy(loopback_capture_activation)
+
     add_library(audio_pipeline STATIC src/audio_pipeline.cpp)
     target_include_directories(audio_pipeline PUBLIC src)
     target_link_libraries(audio_pipeline PUBLIC
         endpoint_audio_format bass_boost_filter harmonic_exciter
-        ole32 oleaut32 uuid avrt)
+        loopback_capture_activation
+        ole32 oleaut32 uuid avrt mmdevapi)
     target_enable_clang_tidy(audio_pipeline)
 
     add_library(main_window STATIC src/main_window.cpp)
@@ -224,6 +232,15 @@ if(BUILD_TESTS)
         add_test(NAME endpoint_audio_format_test
                  COMMAND $<TARGET_FILE:endpoint_audio_format_test> --gtest_color=yes)
         target_enable_clang_tidy(endpoint_audio_format_test)
+
+        add_executable(loopback_capture_activation_test
+            src/loopback_capture_activation_test.cpp)
+        target_link_libraries(loopback_capture_activation_test PRIVATE
+            loopback_capture_activation GTest::gtest_main)
+        target_include_directories(loopback_capture_activation_test PRIVATE src)
+        add_test(NAME loopback_capture_activation_test
+                 COMMAND $<TARGET_FILE:loopback_capture_activation_test> --gtest_color=yes)
+        target_enable_clang_tidy(loopback_capture_activation_test)
 
         add_executable(audio_pipeline_test src/audio_pipeline_test.cpp)
         target_link_libraries(audio_pipeline_test PRIVATE
