@@ -87,12 +87,18 @@ class HarmonicExciter {
   // deadline; missing it causes audio dropouts.
   std::atomic<double> blend_amount_ = 0.0;
 
-  // Precomputed at construction and on `SetSampleRate`; stable between calls.
+  // Isolates the bass fundamental so only low frequencies feed the harmonic
+  // generator.
   Biquad lpf_;
+  // Removes sub-bass rumble so only the target frequency band reaches the
+  // harmonic generator.
   Biquad hpf_;
 
-  // Per-channel IIR state for the low-pass and high-pass filter stages.
+  // Per-channel memory for the low-pass filter so output stays continuous
+  // across buffer boundaries.
   std::array<DelayLine, kChannels> lp_dl_;
+  // Per-channel memory for the high-pass filter so output stays continuous
+  // across buffer boundaries.
   std::array<DelayLine, kChannels> hp_dl_;
 };
 

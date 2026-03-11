@@ -136,6 +136,23 @@ std::memcpy(dst, src, bytes);
 // is sufficient to verify unity gain.
 ```
 
+- Place each data member comment directly above the single member it describes.
+  Do not write one comment that covers multiple members; IDE hover and
+  navigation show only the comment immediately above a declaration.
+
+```cpp
+// Bad: one comment covers two members; hovering on z2_ shows nothing.
+// Per-channel filter memory for continuous output across buffers.
+std::array<double, kChannels> z1_ = {};
+std::array<double, kChannels> z2_ = {};
+
+// Good: each member has its own comment visible on hover.
+// Per-channel memory of the previous intermediate value.
+std::array<double, kChannels> z1_ = {};
+// Per-channel memory of the two-samples-ago intermediate value.
+std::array<double, kChannels> z2_ = {};
+```
+
 ### Control flow and complexity
 - Keep functions at or under 50 lines when practical.
 - Prefer one nesting level. Add a second level only when there is no simpler

@@ -80,14 +80,25 @@ class BassBoostFilter {
   }
 
  private:
+  // Stored because biquad coefficients depend on sample rate and must be
+  // recomputed when either rate or gain changes.
   double sample_rate_;
+  // Current shelf cutoff in Hz; stored to recompute coefficients on gain
+  // change without re-supplying the frequency.
   double freq_ = kDefaultFreq;
-  // atomic so gain can be updated from any thread while audio is processing.
+  // Atomic so gain can be updated from any thread while audio is processing.
   std::atomic<double> gain_db_ = 0.0;
 
+  // Precomputed biquad coefficients; updated on gain, frequency, or sample
+  // rate change so `ProcessStereo` applies them without per-sample work.
   BiquadCoeffs coeffs_;
-  // Per-channel IIR delay state for the Direct Form II transposed structure.
+  // Per-channel memory of the one-sample-ago intermediate value. Without this
+  // the filter would treat every buffer as if silence came before it, causing
+  // audible clicks at buffer boundaries.
   std::array<double, kChannels> z1_ = {};
+  // Per-channel memory of the two-samples-ago intermediate value. Together
+  // with z1_ this gives the filter enough history to produce a smooth,
+  // continuous output across buffer boundaries.
   std::array<double, kChannels> z2_ = {};
 };
 

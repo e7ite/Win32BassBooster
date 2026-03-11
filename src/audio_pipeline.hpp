@@ -94,14 +94,16 @@ class AudioPipeline final : public AudioPipelineInterface {
   // Process loopback captures in the render format, so this serves both paths.
   std::unique_ptr<WAVEFORMATEX, CoTaskMemFreeDeleter> render_format_;
 
-  // These DSP stages are applied in sequence on every audio buffer.
+  // Low-shelf EQ that boosts bass frequencies. Applied first in the DSP chain.
   BassBoostFilter filter_;
+  // Generates upper harmonics from bass content so the boost is audible on
+  // speakers that cannot reproduce low frequencies directly.
   HarmonicExciter exciter_;
 
   // Runs the capture-DSP-render loop off the UI thread so audio processing
-  // never blocks the window message pump. `running_` lets callers observe
-  // pipeline state without querying the thread directly.
+  // never blocks the window message pump.
   std::jthread audio_thread_;
+  // Lets callers observe pipeline state without querying the thread directly.
   std::atomic<bool> running_ = false;
 
   // Cached endpoint label to avoid repeated COM/property-store reads.

@@ -56,20 +56,26 @@ class MainWindow {
   // Stops audio and posts quit to end the message loop.
   void OnDestroy();
 
+  // The top-level application window that owns layout and painting.
   HWND hwnd_ = nullptr;
+  // The slider is a separate Win32 child window; stored so the parent can
+  // reposition it on resize and read its value on scroll events.
   HWND slider_hwnd_ = nullptr;
   // Module instance used when creating child windows and loading resources.
   HINSTANCE instance_ = nullptr;
 
+  // Owned pipeline injected at construction; may be a real device or a test
+  // stub.
   std::unique_ptr<AudioPipelineInterface> audio_;
   // Rebuilt on every `WM_THEMECHANGED`/`WM_SETTINGCHANGE` so colors track the
   // system dark/light mode setting in real time.
   theme_manager::Palette palette_ = {};
 
-  // Cached layout geometry for partial invalidation; storing these avoids
-  // recomputing rectangles on every paint pass.
+  // Cached header region; avoids recomputing layout on every paint pass.
   RECT header_rc_ = {};
+  // Cached footer region; avoids recomputing layout on every paint pass.
   RECT footer_rc_ = {};
+  // Cached slider label region; avoids recomputing layout on every paint pass.
   RECT slider_label_rc_ = {};
 };
 
