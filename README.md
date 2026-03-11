@@ -153,7 +153,6 @@ Use the status bar **launch target** selector to pick
 .
 |-- src/
 |   |-- bass_boost_filter.hpp/.cpp            # Biquad low-shelf bass boost
-|   |-- harmonic_exciter.hpp/.cpp             # Standalone harmonic enhancer module
 |   |-- endpoint_audio_format.hpp/.cpp        # Endpoint PCM decode to stereo float
 |   |-- audio_pipeline_interface.hpp          # Abstract audio pipeline contract
 |   |-- loopback_capture_activation.hpp/.cpp  # Process-loopback capture activation
@@ -254,101 +253,150 @@ can succeed unless the CI build and all tests pass.
 
 ## How it works
 
-In the simplest terms, it intercepts all audio playing through your default
-output device, boosts the low frequencies, and plays it back.
-
 ![Win32 Bass Booster high-level system diagram](bass-booster-architecture.svg)
 
-In more detail, the live pipeline captures audio headed to the default output
-device, applies a low-shelf bass boost, subtracts the original full-band
-signal, and renders only the added low-frequency delta back to that same
-device. Rendering only the delta boosts bass without replaying a delayed copy
-of the full signal.
+### Step 1 -- Find speakers
 
-### Capture and render setup
+The pipeline finds the current default render endpoint -- Windows' name for
+whichever speakers or headphones are currently selected as the output device.
+[`audio_pipeline.cpp`](src/audio_pipeline.cpp) opens the endpoint in shared
+mode (meaning other apps can keep using the same device at the same time) and
+asks Windows for the device's mix format -- the sample rate, bit depth, and
+channel layout the device is already using. The app requires that format to be
+float32 stereo (two channels of 32-bit floating-point samples stored
+back-to-back). Float32 is the simplest format to do math on because the samples
+are already ordinary decimal numbers (like 0.5 or -0.3) rather than raw
+integers that need scaling, and stereo (left + right) is what virtually all
+desktop speakers and headphones use.
 
-The render side opens the current default output endpoint in shared mode and
-requires its mix format to be packed float32 stereo.
+### Step 2 -- Create audio paths
 
-The capture side uses Windows process loopback through
-`ActivateAudioInterfaceAsync`, wrapped in `loopback_capture_activation.cpp`, to
-obtain a loopback `IAudioClient`. In plain terms, process loopback means
-reading the audio headed to the default output device instead of recording from
-a microphone.
+Windows has no built-in way to intercept and modify system audio in-flight, so
+the app creates two separate audio paths on the endpoint found in step 1:
 
-This activation path also excludes this process tree from capture. That
-prevents the rendered bass delta from being captured again and fed back into
-the processing path.
+- **Input (capture) path** -- reads a copy of the audio that is already on its
+  way to the speakers. This uses Windows process loopback through
+  `ActivateAudioInterfaceAsync`, wrapped in
+  [`loopback_capture_activation.cpp`](src/loopback_capture_activation.cpp).
+- **Output (render) path** -- plays processed audio back to the same speakers.
 
-That capture stream uses whatever format the render endpoint uses, so the
-pipeline reuses the negotiated render mix format as the capture format too.
+The capture path uses whatever format the render endpoint uses, so the pipeline
+reuses the same mix format for both paths.
 
-The capture and render loops run on a dedicated high-priority thread using
-`AvSetMmThreadCharacteristicsW("Pro Audio", ...)`. If a stream call fails, the
-audio thread tries to reacquire the current default render endpoint and reopen
-both clients before giving up.
+Both paths run on a dedicated high-priority thread using
+`AvSetMmThreadCharacteristicsW("Pro Audio", ...)`. If a Windows audio API call
+on either path fails, the audio thread tries to reacquire the default render
+endpoint and reopen both paths before giving up.
 
-### Per-packet processing
+### Step 3 -- Set feedback guard
 
-Each captured packet goes through these steps:
+The activation path in
+[`loopback_capture_activation.cpp`](src/loopback_capture_activation.cpp)
+excludes this process tree from capture. Without that guard, the extra bass
+rendered in step 5 would appear in the capture path the next time it reads
+audio, get boosted again, and grow louder each cycle until the output clips
+(distorts because the signal exceeds the maximum level the device can
+reproduce).
 
-1. `endpoint_audio_format` decodes the endpoint packet to interleaved stereo
-   float samples.
-2. `bass_boost_filter` applies a low-shelf biquad centered at 100 Hz.
-3. The pipeline subtracts the original samples from the filtered samples and
-   renders only the difference.
+### Step 4 -- Boost bass
 
-#### Low-shelf biquad filter (`bass_boost_filter.hpp/.cpp`)
+Each captured packet goes through these stages:
+
+1. [`endpoint_audio_format`](src/endpoint_audio_format.cpp) decodes the
+   endpoint packet to interleaved stereo float samples -- left and right
+   channel values stored in alternating order (`L, R, L, R, ...`), where each
+   value is a decimal number (like 0.5 or -0.3) representing the air pressure
+   at that instant.
+2. [`bass_boost_filter`](src/bass_boost_filter.cpp) applies a low-shelf biquad
+   filter. A shelf filter raises or lowers everything below a chosen frequency
+   (here, 100 Hz) by a fixed amount, while leaving higher frequencies mostly
+   unchanged -- think of it as a volume knob that only affects the bass. "Low-
+   shelf" means the boost applies to the low end. 100 Hz is where the filter
+   transitions from boosted to unboosted; frequencies well below 100 Hz get
+   the full boost, frequencies well above are untouched, and frequencies near
+   100 Hz see a gradual rolloff.
 
 A biquad is a second-order IIR (infinite impulse response) filter derived here
-from the [Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/)
-low-shelf formula.
-
-The difference equation is:
+from the [Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/) low-shelf
+formula. "Second-order" means the filter looks back two samples into its own
+history to decide each new output value, giving it a smooth transition between
+the boosted and unboosted frequency ranges. The difference equation is:
 
 ```text
-y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2]
-               - a1*y[n-1] - a2*y[n-2]
+y[n] = b0 * x[n] + b1 * x[n - 1] + b2 * x[n - 2]
+                  - a1 * y[n - 1] - a2 * y[n - 2]
 ```
 
-Five coefficients (`b0`, `b1`, `b2`, `a1`, `a2`) describe the filter. Two
-delay-line values per channel preserve history across audio buffers, so the
-output remains continuous instead of clicking at packet boundaries.
+Five coefficients (`b0`, `b1`, `b2`, `a1`, `a2`) describe the filter. The
+filter also stores the last two input and output values for each channel (left
+and right). These stored values let the filter "remember" where it left off, so
+when Windows hands the app a new packet of audio the filter continues smoothly
+from the previous packet. Without them, each packet would start from silence
+and you would hear a click or pop at every packet boundary.
 
-All frequencies below the shelf frequency (100 Hz) are boosted by `gain_db`
-dB. Frequencies above 100 Hz stay close to the original signal. The filter uses
-a Butterworth Q of 0.707 for a maximally flat response.
+All frequencies below 100 Hz are boosted by the chosen gain (measured in
+decibels -- a logarithmic loudness scale where +6 dB roughly doubles the
+perceived level). Frequencies above 100 Hz stay close to the original signal.
+The filter uses a Butterworth Q of 0.707, which produces the flattest possible
+response in the boosted region -- no peaks or dips, just a smooth level
+increase.
 
-#### Slider mapping
-
-The slider position `p` in `[0, 1]` maps to gain via a square-root curve:
+**Slider mapping.** The slider in
+[`main_window.cpp`](src/main_window.cpp) maps position `p` in `[0, 1]` to gain
+via a square-root curve:
 
 ```cpp
 gain_db = kMaxGainDb * sqrt(p);  // p=0 -> 0 dB, p=1 -> 18 dB
 ```
 
-The square-root curve is convex, so the midpoint already produces about 70.7%
-of the maximum gain. That makes the boost audible early in the slider travel.
-
-#### Why render only the delta?
-
-The low-shelf filter leaves mids and highs close to the original signal. By
-rendering `filter(signal) - signal` instead of the full filtered output, the
-app adds only the bass energy introduced by the shelf. That avoids the comb
-filtering that would come from replaying a delayed full-band copy of the system
-mix and removes the need for the older output attenuation stage.
-
-#### Harmonic exciter status
-
-`harmonic_exciter` is still part of the repository and has its own tests, but
-the current live `audio_pipeline` does not inject it into the render path. The
-active output path is the low-shelf bass delta described above.
-
-### Thread safety
+The square-root curve bends upward quickly and then flattens out, so the
+midpoint of the slider already produces about 70.7% of the maximum gain. That
+makes the boost audible early in the slider travel instead of bunching all the
+change near the end.
 
 `SetBoostLevel` is called from the UI thread while the audio thread is running.
 The user-controlled DSP parameters are stored in atomics, so the audio thread
-can read them without taking locks on the hot path.
+can read them without taking locks on the hot path (the time-critical inner
+loop that processes every audio sample).
+
+### Step 5 -- Play added bass
+
+[`audio_pipeline.cpp`](src/audio_pipeline.cpp) subtracts the original samples
+from the filtered samples and renders only the difference
+(`filter(signal) - signal`) through the output path. Because the low-shelf
+filter leaves mids and highs close to the original signal, the difference
+contains only the extra bass energy the filter introduced.
+
+If the app played the full filtered signal instead -- which already contains
+the original mids, highs, and everything else -- you would hear a second,
+slightly delayed copy of all system audio layered on top of the original. That
+delay causes comb filtering: certain frequencies cancel out and others
+reinforce, producing a hollow, metallic sound (like talking into a tube). By
+rendering only the difference, the app adds bass without replaying a duplicate
+of everything else the system is already playing.
+
+### FAQ
+
+**Why not write a device driver to intercept audio directly?**
+
+A kernel-mode audio driver would let the app sit between applications and the
+speakers, modifying audio before it reaches the hardware. However, Windows
+requires kernel drivers to be signed with a special Extended Validation (EV)
+certificate (which costs hundreds of dollars per year), and a bug in a kernel
+driver can crash the entire system with a blue screen. The WASAPI loopback
+approach used here runs entirely in user space: no special certificates, no
+admin privileges, and a bug can only crash the app itself -- not the OS.
+
+**Doesn't playing bass through the output path mean you hear it twice -- once
+from the original audio and again from the app?**
+
+No. The original audio is already playing through the speakers from whatever
+app produced it (a music player, a game, etc.). Step 5 renders only the
+*difference* between the filtered signal and the original -- that is, only the
+extra bass energy the shelf filter added. The mids, highs, and original bass
+level are subtracted out, so the output path carries just the added boost.
+You hear the original audio once (from the source app) plus the extra bass
+(from this app), not two copies of everything.
 
 ## License
 
