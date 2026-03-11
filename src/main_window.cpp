@@ -40,8 +40,8 @@ constexpr int kSliderPageDivisor = 20;
 constexpr int kTitleTop = 8;
 constexpr int kTitleBottom = 38;
 constexpr int kSubTop = 34;
-constexpr int kSubBottomPad = 4;   // padding below subtitle to header bottom
-constexpr int kBadgePad = 10;      // top offset and right inset of the dB badge
+constexpr int kSubBottomPad = 4;  // padding below subtitle to header bottom
+constexpr int kBadgePad = 10;     // top offset and right inset of the dB badge
 constexpr int kBadgeBottom = 46;
 
 struct MainWindowParams {
@@ -247,8 +247,8 @@ bool RegisterMainWindowClass(HINSTANCE instance, const MainWindowParams& params,
 
 double SliderPositionToBoostLevel(int slider_pos,
                                   const MainWindowParams& params) {
-  return 1.0 - static_cast<double>(slider_pos) /
-                   static_cast<double>(params.slider_max);
+  return 1.0 - (static_cast<double>(slider_pos) /
+                static_cast<double>(params.slider_max));
 }
 
 }  // namespace
@@ -271,9 +271,8 @@ bool MainWindow::Create(HINSTANCE instance, int cmd_show) {
 
   hwnd_ = CreateWindowExW(
       /*dwExStyle=*/0, kMainWindowParams.class_name, kMainWindowParams.title,
-      WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
-      CW_USEDEFAULT, kMainWindowParams.initial_width,
-      kMainWindowParams.initial_height,
+      WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+      kMainWindowParams.initial_width, kMainWindowParams.initial_height,
       /*hWndParent=*/nullptr, /*hMenu=*/nullptr, instance, this);
   if (hwnd_ == nullptr) {
     return false;
@@ -427,8 +426,11 @@ void MainWindow::OnPaint() {
   FillRect(mem_dc, &client_rect, bg_brush);
   DeleteObject(bg_brush);
 
-  const PaintContext ctx = {palette_, header_rc_, footer_rc_, slider_label_rc_,
-                            audio_.get()};
+  const PaintContext ctx = {.palette = palette_,
+                            .header_rc = header_rc_,
+                            .footer_rc = footer_rc_,
+                            .slider_label_rc = slider_label_rc_,
+                            .audio = audio_.get()};
   PaintHeader(mem_dc, ctx);
   PaintSliderLabel(mem_dc, ctx);
   PaintFooter(mem_dc, ctx);

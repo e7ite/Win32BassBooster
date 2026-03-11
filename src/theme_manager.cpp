@@ -68,16 +68,16 @@ void ApplyTitleBarTheme(HWND hwnd) {
   DwmSetWindowAttribute(hwnd, kDwmwaDarkMode, &dark, sizeof(dark));
 }
 
-COLORREF BlendColor(COLORREF base, COLORREF target, float blend) {
+COLORREF BlendColor(ColorRange range, float blend) {
   blend = std::clamp(blend, 0.0F, 1.0F);
-  auto lerp_channel = [blend](int base_channel, int target_channel) -> DWORD {
+  auto lerp_channel = [blend](int from_channel, int to_channel) -> DWORD {
     return static_cast<DWORD>(
-        static_cast<float>(base_channel) +
-        (static_cast<float>(target_channel - base_channel) * blend));
+        static_cast<float>(from_channel) +
+        (static_cast<float>(to_channel - from_channel) * blend));
   };
-  return RGB(lerp_channel(GetRValue(base), GetRValue(target)),
-             lerp_channel(GetGValue(base), GetGValue(target)),
-             lerp_channel(GetBValue(base), GetBValue(target)));
+  return RGB(lerp_channel(GetRValue(range.from), GetRValue(range.to)),
+             lerp_channel(GetGValue(range.from), GetGValue(range.to)),
+             lerp_channel(GetBValue(range.from), GetBValue(range.to)));
 }
 
 }  // namespace theme_manager

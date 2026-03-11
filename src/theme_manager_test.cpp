@@ -6,51 +6,49 @@
 
 #include <windows.h>
 
+#include <vector>
+
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace theme_manager {
 namespace {
 
-TEST(ThemeManagerTest, BlendColorAtT0ReturnsBase) {
-  const COLORREF base = RGB(0, 0, 0);
-  const COLORREF target = RGB(255, 255, 255);
-  const COLORREF blended = BlendColor(base, target, 0.0F);
+TEST(ThemeManagerTest, BlendColorAtT0ReturnsFrom) {
+  const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(255, 255, 255)};
+  const COLORREF blended = BlendColor(range, 0.0F);
   EXPECT_EQ(GetRValue(blended), 0U);
   EXPECT_EQ(GetGValue(blended), 0U);
   EXPECT_EQ(GetBValue(blended), 0U);
 }
 
-TEST(ThemeManagerTest, BlendColorAtT1ReturnsTarget) {
-  const COLORREF base = RGB(0, 0, 0);
-  const COLORREF target = RGB(200, 100, 50);
-  const COLORREF blended = BlendColor(base, target, 1.0F);
+TEST(ThemeManagerTest, BlendColorAtT1ReturnsTo) {
+  const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(200, 100, 50)};
+  const COLORREF blended = BlendColor(range, 1.0F);
   EXPECT_EQ(GetRValue(blended), 200U);
   EXPECT_EQ(GetGValue(blended), 100U);
   EXPECT_EQ(GetBValue(blended), 50U);
 }
 
 TEST(ThemeManagerTest, BlendColorMidpointIsHalfway) {
-  const COLORREF base = RGB(0, 0, 0);
-  const COLORREF target = RGB(100, 200, 50);
-  const COLORREF blended = BlendColor(base, target, 0.5F);
+  const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(100, 200, 50)};
+  const COLORREF blended = BlendColor(range, 0.5F);
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 50, 1);
   EXPECT_NEAR(static_cast<int>(GetGValue(blended)), 100, 1);
   EXPECT_NEAR(static_cast<int>(GetBValue(blended)), 25, 1);
 }
 
 TEST(ThemeManagerTest, BlendColorClampsAboveOne) {
-  const COLORREF base = RGB(0, 0, 0);
-  const COLORREF target = RGB(255, 255, 255);
-  const COLORREF clamped = BlendColor(base, target, 2.0F);
-  const COLORREF at_one = BlendColor(base, target, 1.0F);
+  const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(255, 255, 255)};
+  const COLORREF clamped = BlendColor(range, 2.0F);
+  const COLORREF at_one = BlendColor(range, 1.0F);
   EXPECT_EQ(clamped, at_one);
 }
 
 TEST(ThemeManagerTest, BlendColorClampsBelowZero) {
-  const COLORREF base = RGB(0, 0, 0);
-  const COLORREF target = RGB(255, 255, 255);
-  const COLORREF clamped = BlendColor(base, target, -1.0F);
-  const COLORREF at_zero = BlendColor(base, target, 0.0F);
+  const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(255, 255, 255)};
+  const COLORREF clamped = BlendColor(range, -1.0F);
+  const COLORREF at_zero = BlendColor(range, 0.0F);
   EXPECT_EQ(clamped, at_zero);
 }
 
@@ -65,50 +63,43 @@ TEST(ThemeManagerTest, BuildPaletteReturnsNonZeroColors) {
 
 TEST(ThemeManagerTest, BuildPaletteAllFieldsNonZero) {
   const Palette palette = BuildPalette();
-  EXPECT_NE(palette.background, 0U);
-  EXPECT_NE(palette.surface, 0U);
-  EXPECT_NE(palette.accent, 0U);
-  EXPECT_NE(palette.text, 0U);
-  EXPECT_NE(palette.text_muted, 0U);
-  EXPECT_NE(palette.slider_track, 0U);
-  EXPECT_NE(palette.slider_thumb, 0U);
-  EXPECT_NE(palette.eq_bar, 0U);
-  EXPECT_NE(palette.eq_bar_peak, 0U);
-  EXPECT_NE(palette.grid_line, 0U);
-  EXPECT_NE(palette.border, 0U);
+  const std::vector<COLORREF> fields = {
+      palette.background,   palette.surface,    palette.accent,
+      palette.text,         palette.text_muted, palette.slider_track,
+      palette.slider_thumb, palette.eq_bar,     palette.eq_bar_peak,
+      palette.grid_line,    palette.border};
+  EXPECT_THAT(fields, ::testing::Each(::testing::Ne(0U)));
 }
 
 TEST(ThemeManagerTest, BlendColorQuarterBlend) {
-  const COLORREF base = RGB(0, 0, 0);
-  const COLORREF target = RGB(100, 200, 40);
-  const COLORREF blended = BlendColor(base, target, 0.25F);
+  const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(100, 200, 40)};
+  const COLORREF blended = BlendColor(range, 0.25F);
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 25, 1);
   EXPECT_NEAR(static_cast<int>(GetGValue(blended)), 50, 1);
   EXPECT_NEAR(static_cast<int>(GetBValue(blended)), 10, 1);
 }
 
 TEST(ThemeManagerTest, BlendColorThreeQuarterBlend) {
-  const COLORREF base = RGB(0, 0, 0);
-  const COLORREF target = RGB(100, 200, 40);
-  const COLORREF blended = BlendColor(base, target, 0.75F);
+  const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(100, 200, 40)};
+  const COLORREF blended = BlendColor(range, 0.75F);
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 75, 1);
   EXPECT_NEAR(static_cast<int>(GetGValue(blended)), 150, 1);
   EXPECT_NEAR(static_cast<int>(GetBValue(blended)), 30, 1);
 }
 
-TEST(ThemeManagerTest, BlendColorIdenticalBaseAndTarget) {
+TEST(ThemeManagerTest, BlendColorIdenticalFromAndTo) {
   const COLORREF color = RGB(128, 64, 32);
+  const ColorRange range = {.from = color, .to = color};
   // Any blend factor between identical colors should return the same color.
-  EXPECT_EQ(BlendColor(color, color, 0.0F), color);
-  EXPECT_EQ(BlendColor(color, color, 0.5F), color);
-  EXPECT_EQ(BlendColor(color, color, 1.0F), color);
+  EXPECT_EQ(BlendColor(range, 0.0F), color);
+  EXPECT_EQ(BlendColor(range, 0.5F), color);
+  EXPECT_EQ(BlendColor(range, 1.0F), color);
 }
 
 TEST(ThemeManagerTest, BlendColorChannelsDoNotCrossTalk) {
-  // Only the red channel differs; green and blue should stay at base.
-  const COLORREF base = RGB(0, 100, 200);
-  const COLORREF target = RGB(255, 100, 200);
-  const COLORREF blended = BlendColor(base, target, 0.5F);
+  // Only the red channel differs; green and blue should stay at `from`.
+  const ColorRange range = {.from = RGB(0, 100, 200), .to = RGB(255, 100, 200)};
+  const COLORREF blended = BlendColor(range, 0.5F);
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 127, 1);
   EXPECT_EQ(GetGValue(blended), 100U);
   EXPECT_EQ(GetBValue(blended), 200U);

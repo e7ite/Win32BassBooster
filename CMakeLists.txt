@@ -114,7 +114,7 @@ if(BUILD_TESTS)
         GIT_SHALLOW    TRUE
     )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+    set(BUILD_GMOCK ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
     include(CTest)
     include(GoogleTest)
@@ -235,7 +235,7 @@ if(BUILD_TESTS)
 
         add_executable(theme_manager_test src/theme_manager_test.cpp)
         target_link_libraries(theme_manager_test PRIVATE
-            theme_manager GTest::gtest_main)
+            theme_manager GTest::gtest_main GTest::gmock)
         target_include_directories(theme_manager_test PRIVATE src)
         add_test(NAME theme_manager_test
                  COMMAND $<TARGET_FILE:theme_manager_test> --gtest_color=yes)

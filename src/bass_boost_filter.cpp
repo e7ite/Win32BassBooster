@@ -23,19 +23,26 @@ constexpr double kNyquistGuardRatio = 0.4;
   return static_cast<size_t>(channel);
 }
 
-[[nodiscard]] BiquadCoeffs ComputeCoeffs(double gain_db, double freq_hz,
-                                         double sample_rate) {
+// Inputs to the Audio EQ Cookbook low-shelf formula. Grouped so the three
+// values that fully determine the shelf cannot be accidentally transposed.
+struct ShelfParams {
+  double gain_db;
+  double freq_hz;
+  double sample_rate;
+};
+
+[[nodiscard]] BiquadCoeffs ComputeCoeffs(ShelfParams params) {
   // Audio EQ Cookbook -- Low Shelf
   // https://www.w3.org/TR/audio-eq-cookbook/
   // `a`: linear amplitude ratio for the shelf. /40 (not /20) because a low
   // shelf applies half the gain at its midpoint - the cookbook defines it this
   // way so the shelf gain at `w0` equals exactly `gain_db` dB.
   const double a =  // NOLINT(readability-identifier-length) - Cookbook symbol
-      std::pow(10.0, gain_db / 40.0);
+      std::pow(10.0, params.gain_db / 40.0);
   // `w0`: angular frequency in radians, mapping the Hz cutoff to [0, 2*pi]
   // range that IIR filter math operates in.
   const double w0 =  // NOLINT(readability-identifier-length) - Cookbook symbol
-      2.0 * std::numbers::pi * freq_hz / sample_rate;
+      2.0 * std::numbers::pi * params.freq_hz / params.sample_rate;
   const double cos_w0 = std::cos(w0);
   // `alpha`: filter bandwidth factor derived from Q; higher Q = narrower
   // bandwidth = steeper rolloff at the shelf edge.
@@ -61,10 +68,10 @@ constexpr double kNyquistGuardRatio = 0.4;
 }
 
 [[nodiscard]] double ProcessSample(double input, const BiquadCoeffs& coeffs,
-                                   double& z1, double& z2) noexcept {
-  const double output = (coeffs.b0 * input) + z1;
-  z1 = (coeffs.b1 * input) - (coeffs.a1 * output) + z2;
-  z2 = (coeffs.b2 * input) - (coeffs.a2 * output);
+                                   double& delay1, double& delay2) noexcept {
+  const double output = (coeffs.b0 * input) + delay1;
+  delay1 = (coeffs.b1 * input) - (coeffs.a1 * output) + delay2;
+  delay2 = (coeffs.b2 * input) - (coeffs.a2 * output);
   return output;
 }
 
@@ -72,23 +79,31 @@ constexpr double kNyquistGuardRatio = 0.4;
 
 BassBoostFilter::BassBoostFilter(double sample_rate)
     : sample_rate_(sample_rate) {
-  coeffs_ = ComputeCoeffs(gain_db_.load(), freq_, sample_rate_);
+  coeffs_ = ComputeCoeffs({.gain_db = gain_db_.load(),
+                           .freq_hz = freq_,
+                           .sample_rate = sample_rate_});
 }
 
 void BassBoostFilter::SetGainDb(double gain_db) {
   gain_db_.store(ClampGain(gain_db));
-  coeffs_ = ComputeCoeffs(gain_db_.load(), freq_, sample_rate_);
+  coeffs_ = ComputeCoeffs({.gain_db = gain_db_.load(),
+                           .freq_hz = freq_,
+                           .sample_rate = sample_rate_});
 }
 
 void BassBoostFilter::SetFrequency(double freq_hz) {
   freq_ = std::max(kMinFreqHz,
                    std::min(freq_hz, sample_rate_ * kNyquistGuardRatio));
-  coeffs_ = ComputeCoeffs(gain_db_.load(), freq_, sample_rate_);
+  coeffs_ = ComputeCoeffs({.gain_db = gain_db_.load(),
+                           .freq_hz = freq_,
+                           .sample_rate = sample_rate_});
 }
 
 void BassBoostFilter::SetSampleRate(double sample_rate) {
   sample_rate_ = sample_rate;
-  coeffs_ = ComputeCoeffs(gain_db_.load(), freq_, sample_rate_);
+  coeffs_ = ComputeCoeffs({.gain_db = gain_db_.load(),
+                           .freq_hz = freq_,
+                           .sample_rate = sample_rate_});
   Reset();
 }
 
@@ -105,21 +120,19 @@ void BassBoostFilter::ProcessStereo(std::span<float> samples) {
     // accumulating across recursive taps; cast back to float at the buffer
     // boundary where the precision loss happens only once per sample and to
     // match WASAPI's 32-bit float format.
-    samples[i] =
-        static_cast<float>(ProcessSample(samples[i], coeffs_, z1_[kLeftIndex],
-                                         z2_[kLeftIndex]));
-    samples[i + 1] =
-        static_cast<float>(ProcessSample(samples[i + 1], coeffs_,
-                                         z1_[kRightIndex], z2_[kRightIndex]));
+    samples[i] = static_cast<float>(
+        ProcessSample(samples[i], coeffs_, z1_[kLeftIndex], z2_[kLeftIndex]));
+    samples[i + 1] = static_cast<float>(ProcessSample(
+        samples[i + 1], coeffs_, z1_[kRightIndex], z2_[kRightIndex]));
   }
 }
 
 void BassBoostFilter::ProcessMono(std::span<float> samples, Channel channel) {
   const size_t channel_index = ToIndex(channel);
-  double& z1 = z1_[channel_index];
-  double& z2 = z2_[channel_index];
+  double& delay1 = z1_[channel_index];
+  double& delay2 = z2_[channel_index];
   for (float& sample : samples) {
     // Same float<->double boundary as `ProcessStereo`.
-    sample = static_cast<float>(ProcessSample(sample, coeffs_, z1, z2));
+    sample = static_cast<float>(ProcessSample(sample, coeffs_, delay1, delay2));
   }
 }

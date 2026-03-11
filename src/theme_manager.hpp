@@ -34,9 +34,15 @@ struct Palette {
 // reverts to the default title bar otherwise.
 void ApplyTitleBarTheme(HWND hwnd);
 
-// Returns a colour linearly interpolated between `base` and `target`.
-// `blend`=0.0 returns `base`; `blend`=1.0 returns `target`.
-[[nodiscard]] COLORREF BlendColor(COLORREF base, COLORREF target, float blend);
+// Two colours that define an interpolation range.
+struct ColorRange {
+  COLORREF from = 0;
+  COLORREF to = 0;
+};
+
+// Returns a colour linearly interpolated across `range`.
+// `blend`=0.0 returns `range.from`; `blend`=1.0 returns `range.to`.
+[[nodiscard]] COLORREF BlendColor(ColorRange range, float blend);
 
 }  // namespace theme_manager
 
