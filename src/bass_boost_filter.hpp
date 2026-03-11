@@ -30,9 +30,9 @@ class BassBoostFilter {
 
   // 0 dB is the minimum: the filter is always additive, never attenuating.
   static constexpr double kMinGainDb = 0.0;
-  // 15 dB ceiling: higher gains cause audible clipping on most programme
-  // material.
-  static constexpr double kMaxGainDb = 15.0;
+  // 18 dB ceiling: enough for a heavy bass boost. Process loopback renders
+  // only the delta (filter - original), so clipping risk is low.
+  static constexpr double kMaxGainDb = 18.0;
 
   // 100 Hz shelf targets the bass band that headphones can reproduce.
   static constexpr double kDefaultFreq = 100.0;

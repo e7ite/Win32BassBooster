@@ -20,8 +20,9 @@ class HarmonicExciter {
   // peak.
   static constexpr double kDefaultQ = 0.707;
 
-  // 0.25: enough to trigger the missing-fundamental effect without muddiness.
-  static constexpr double kMaxHarmonicGain = 0.25;
+  // 0.5: strong enough to make bass audible on small speakers/headphones that
+  // roll off below 60 Hz; the tanh limiter prevents clipping.
+  static constexpr double kMaxHarmonicGain = 0.5;
 
   // Left and right: each channel needs its own filter delay-line state.
   static constexpr int kChannels = 2;
