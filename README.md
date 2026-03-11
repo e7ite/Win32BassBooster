@@ -55,8 +55,8 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Tests cover the DSP core (`bass_boost_filter`, `harmonic_exciter`,
-`endpoint_audio_format`) and all Win32 modules. Google Test and Google Mock are
-fetched automatically by CMake on first configure.
+`endpoint_audio_format`) and all Win32 modules. Google Test and Google Mock
+are fetched automatically by CMake on first configure.
 
 ### Reconfiguring from scratch
 
@@ -279,29 +279,9 @@ The capture and render loops run on a dedicated high-priority thread
 
 ### DSP chain (per audio buffer)
 
-Each buffer goes through three stages in order:
+Each buffer goes through two stages in order:
 
-#### 1. Harmonic exciter (`harmonic_exciter.hpp/.cpp`)
-
-Headphones physically cannot reproduce frequencies below ~40-60 Hz. The harmonic
-exciter works around this with psychoacoustics: the human brain can *infer* a
-missing fundamental from its harmonics. If you hear a 120 Hz tone and a 180 Hz
-tone together, you perceive a 60 Hz bass note even if 60 Hz is absent.
-
-Implementation:
-1. **100 Hz low-pass filter (biquad)** -- isolates the sub-bass signal.
-2. **Full-wave rectification** (`abs()`) -- this is an even nonlinearity.
-   Applying it to a 60 Hz sine `sin(wt)` produces `|sin(wt)|`, which contains
-   the 2nd harmonic (120 Hz) and higher even harmonics. Your headphones can
-   reproduce 120 Hz.
-3. **40 Hz high-pass filter (biquad)** -- removes DC and near-DC artifacts
-   introduced by rectification.
-4. **Blend 25% back** into the stereo signal.
-
-This adds harmonic content in the range headphones can reproduce, and the brain
-reconstructs the implied fundamental.
-
-#### 2. Low-shelf biquad filter (`bass_boost_filter.hpp/.cpp`)
+#### 1. Low-shelf biquad filter (`bass_boost_filter.hpp/.cpp`)
 
 A second-order IIR (infinite impulse response) filter derived from the
 [Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/) low-shelf formula.
@@ -328,23 +308,22 @@ passband or stopband.
 square-root curve:
 
 ```cpp
-gain_db = kMaxGainDb * sqrt(p);  // p=0 -> 0 dB, p=1 -> 15 dB
+gain_db = kMaxGainDb * sqrt(p);  // p=0 -> 0 dB, p=1 -> 12 dB
 ```
 
 The square-root curve is convex: at the midpoint of slider travel you get
 ~70.7% of max gain rather than 50%, so bass boost is audible immediately when
 you move the slider.
 
-#### 3. tanh soft limiter
+#### 2. Output attenuation
 
-A high shelf gain can push sample amplitudes above +/-1.0, causing hard digital
-clipping (the "pop" you'd hear at max boost). `std::tanh(x)` is applied
-per-sample after the DSP chain:
-
-- Near 0, `tanh(x) ~= x` -- transparent at normal levels.
-- Above ~+/-0.7, it compresses smoothly toward the +/-1.0 asymptote instead of
-  hard-clipping.
-- No abrupt transition; no audible artifact.
+The shelf filter boosts bass frequencies by up to 12 dB (~4x linear gain),
+which would push bass peaks above +/-1.0 and cause hard digital clipping.
+Instead of clipping, the entire signal is attenuated by `1/sqrt(linear_gain)`
+after the filter. At 12 dB boost this gives an output gain of ~0.5: bass peaks
+land near full scale while mids and highs drop to half amplitude, making bass
+12 dB louder *relative* to everything else -- the characteristic "YouTube bass
+boost" sound.
 
 ### Thread safety
 
