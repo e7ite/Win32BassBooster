@@ -27,10 +27,10 @@ endif()
 
 # Options
 option(BUILD_TESTS "Build unit tests" ON)
-option(BUILD_GUI   "Build Win32 GUI application (Windows only)" ON)
+option(BUILD_GUI   "Build Win32 GUI application" ON)
 
 # -----------------------------------------------------------------------
-# Platform detection
+# Windows configuration
 # -----------------------------------------------------------------------
 if(WIN32)
     add_compile_definitions(PLATFORM_WINDOWS UNICODE _UNICODE NOMINMAX)
@@ -42,8 +42,6 @@ if(WIN32)
     endif()
 else()
     set(BUILD_GUI OFF)
-    message(STATUS
-        "Non-Windows: GUI disabled, only DSP core and tests will build")
 endif()
 
 # -----------------------------------------------------------------------
@@ -121,7 +119,7 @@ if(BUILD_TESTS)
 endif()
 
 # -----------------------------------------------------------------------
-# DSP static libraries  (cross-platform)
+# DSP static libraries
 # -----------------------------------------------------------------------
 add_library(bass_boost_filter STATIC src/bass_boost_filter.cpp)
 target_include_directories(bass_boost_filter PUBLIC src)
@@ -144,7 +142,7 @@ endif()
 target_enable_clang_tidy(harmonic_exciter)
 
 # -----------------------------------------------------------------------
-# Win32-only static libraries
+# Audio and UI static libraries
 # -----------------------------------------------------------------------
 if(WIN32)
     add_library(endpoint_audio_format STATIC src/endpoint_audio_format.cpp)
@@ -180,7 +178,7 @@ if(WIN32)
 endif()
 
 # -----------------------------------------------------------------------
-# Main executable  (Windows only)
+# Main executable
 # -----------------------------------------------------------------------
 if(WIN32 AND BUILD_GUI)
     add_executable(Win32BassBooster WIN32
@@ -205,7 +203,7 @@ endif()
 # Tests
 # -----------------------------------------------------------------------
 if(BUILD_TESTS)
-    # --- Cross-platform DSP tests ---
+    # --- DSP tests ---
     add_executable(bass_boost_filter_test src/bass_boost_filter_test.cpp)
     target_link_libraries(bass_boost_filter_test PRIVATE
         bass_boost_filter GTest::gtest_main)
@@ -222,7 +220,7 @@ if(BUILD_TESTS)
              COMMAND $<TARGET_FILE:harmonic_exciter_test> --gtest_color=yes)
     target_enable_clang_tidy(harmonic_exciter_test)
 
-    # --- Win32-only tests ---
+    # --- Windows integration tests ---
     if(WIN32)
         add_executable(endpoint_audio_format_test
             src/endpoint_audio_format_test.cpp)

@@ -4,29 +4,33 @@
 
 A simple, system-wide bass boost application for Windows.
 
+![Win32 Bass Booster screenshot](bass-booster-screenshot.png)
+
 ## How to use
 
-Simply run `Win32BassBooster.exe`, then drag the slider to control how much bass
-you want. I tried finding something this simple out there, and couldn't. The
-title bar and colors follow your Windows dark/light theme setting.
+Run `Win32BassBooster.exe`, then drag the slider to choose how much bass boost
+you want. The window footer shows the current default render device name when
+startup succeeds.
 
 # How to build
 
 ## Prerequisites
 
 - **Windows 10 or later**
-- **Visual Studio 2019 or 2022** (Community, Professional, or Enterprise) with
-  the **Desktop development with C++** workload, **or** the free
-   [Build Tools for Visual Studio 2019][vs2019-build-tools] or
-   [Build Tools for Visual Studio 2022][vs2022-build-tools]
-  with the same workload selected.
-- **CMake 3.16+** -- included with Visual Studio 2019 16.5+ and all VS 2022
-   releases; also available standalone from [cmake.org][cmake-download].
+- **Visual Studio 2022** (Community, Professional, or Enterprise) with the
+  **Desktop development with C++** workload, or the free
+  [Build Tools for Visual Studio 2022][vs2022-build-tools] with the same
+  workload selected
+- **CMake 3.16+** -- included with Visual Studio 2022 and also available
+  standalone from [cmake.org][cmake-download]
 
-All commands below must be run from a **Developer Command Prompt for VS 2019**
-(or VS 2022, or any terminal where `cmake` and the MSVC toolchain are on
-`PATH`). You can open one from the Start menu:
-*Visual Studio 2019 -> Developer Command Prompt*.
+Optional but strongly recommended:
+
+- **LLVM** with `clang-format` and `clang-tidy` on `PATH`
+
+All commands below should be run from a **Developer Command Prompt for VS
+2022**, or any terminal where `cmake` and the MSVC toolchain are already on
+`PATH`.
 
 ## Building and testing
 
@@ -36,7 +40,7 @@ cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-The built executable is at `build\bin\Release\Win32BassBooster.exe`.
+The built executable is written to `build\bin\Release\Win32BassBooster.exe`.
 
 ### Debug build
 
@@ -54,9 +58,8 @@ Debug output lands in `build\bin\Debug\Win32BassBooster.exe`.
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Tests cover the DSP core (`bass_boost_filter`, `harmonic_exciter`,
-`endpoint_audio_format`) and all Win32 modules. Google Test and Google Mock
-are fetched automatically by CMake on first configure.
+Google Test and Google Mock are fetched automatically by CMake on first
+configure.
 
 ### Reconfiguring from scratch
 
@@ -75,14 +78,13 @@ cmake --build build --config Release
 
 Install these two extensions from the VS Code Marketplace:
 
-- [C/C++][vscode-cpptools] (ms-vscode.cpptools) -- IntelliSense and debugging.
-- [CMake Tools][vscode-cmake-tools]
-  (ms-vscode.cmake-tools) -- configure, build, and test without leaving the
-  editor.
+- [C/C++][vscode-cpptools] (ms-vscode.cpptools) -- IntelliSense and debugging
+- [CMake Tools][vscode-cmake-tools] (ms-vscode.cmake-tools) -- configure,
+  build, and test without leaving the editor
 
 ### Open the project
 
-**File -> Open Folder** and select the `Win32BassBooster` directory. CMake
+Use **File -> Open Folder** and select the `Win32BassBooster` directory. CMake
 Tools will detect `CMakePresets.json` and offer to configure automatically.
 
 ### Select a configure preset
@@ -90,12 +92,12 @@ Tools will detect `CMakePresets.json` and offer to configure automatically.
 The project uses **CMake presets** instead of kit selection. When prompted, or
 via **Ctrl+Shift+P -> CMake: Select Configure Preset**, choose:
 
-```
+```text
 Visual Studio 2022 x64
 ```
 
-This selects the VS 2022 generator with x64 architecture and enables both the
-GUI and test targets.
+This selects the Visual Studio 2022 generator with x64 architecture and
+enables both the GUI and test targets.
 
 ### Select a build preset
 
@@ -104,14 +106,14 @@ Open **Ctrl+Shift+P -> CMake: Select Build Preset** and choose **release** or
 
 ### Build
 
-Press **F7**, click the **Build** button in the status bar, or:
+Press **F7**, click the **Build** button in the status bar, or run:
 
-```
+```text
 Ctrl+Shift+P -> CMake: Build
 ```
 
-The executable is written to `build\bin\Release\Win32BassBooster.exe` (or
-`build\bin\Debug\` for a Debug build).
+The executable is written to `build\bin\Release\Win32BassBooster.exe` or
+`build\bin\Debug\Win32BassBooster.exe`.
 
 ### Troubleshooting: platform mismatch
 
@@ -127,45 +129,48 @@ Then reopen the folder or run **Ctrl+Shift+P -> CMake: Configure**.
 ### Run the tests
 
 Open the **Testing** panel (beaker icon in the Activity Bar) to run and
-inspect individual tests, or run all of them at once:
+inspect individual tests, or run all tests at once:
 
-```
+```text
 Ctrl+Shift+P -> CMake: Run Tests
 ```
 
-### Run / debug the application
+### Run or debug the application
 
-Use the status bar **launch target** selector (next to the play button) to
-pick **Win32BassBooster**, then:
+Use the status bar **launch target** selector to pick
+**Win32BassBooster**, then:
 
-- **Ctrl+Shift+P -> CMake: Run Without Debugging** -- launch the built exe.
+- **Ctrl+Shift+P -> CMake: Run Without Debugging** -- launch the built exe
 - **Ctrl+Shift+P -> CMake: Debug** -- launch under the debugger with
-  breakpoints.
+  breakpoints
 
 ## Project layout
 
-```
+```text
 .
-├── src/
-│   ├── bass_boost_filter.hpp/.cpp      # Biquad low-shelf IIR filter
-│   ├── harmonic_exciter.hpp/.cpp       # Psychoacoustic bass enhancement
-│   ├── endpoint_audio_format.hpp/.cpp  # Endpoint frame decoding to stereo float
-│   ├── audio_pipeline_interface.hpp    # Abstract audio pipeline contract
-│   ├── audio_pipeline.hpp/.cpp         # WASAPI loopback capture + re-render
-│   ├── theme_manager.hpp/.cpp          # Dark/light palette + DWM title bar
-│   ├── main_window.hpp/.cpp            # Top-level Win32 window
-│   ├── main.cpp                        # Entry point
-│   └── *_test.cpp                      # Unit tests (one per module)
-├── resources/
-│   └── app.rc                          # Manifest, version info
-├── .github/
-│   └── workflows/build.yml             # CI: build + test on every push/PR
-├── .clang-format                       # Code style (Google C++ style)
-├── .clang-tidy                         # Static analysis rules
-├── .githooks/
-│   └── pre-commit                      # Auto-formats staged files on commit
-├── CMakePresets.json                    # CMake configure/build presets
-└── CMakeLists.txt
+|-- src/
+|   |-- bass_boost_filter.hpp/.cpp            # Biquad low-shelf bass boost
+|   |-- harmonic_exciter.hpp/.cpp             # Standalone harmonic enhancer module
+|   |-- endpoint_audio_format.hpp/.cpp        # Endpoint PCM decode to stereo float
+|   |-- audio_pipeline_interface.hpp          # Abstract audio pipeline contract
+|   |-- loopback_capture_activation.hpp/.cpp  # Process-loopback capture activation
+|   |-- audio_pipeline.hpp/.cpp               # Startup, recovery, and bass-delta render path
+|   |-- theme_manager.hpp/.cpp                # Dark/light palette + title bar theming
+|   |-- main_window.hpp/.cpp                  # Themed Win32 window and slider UI
+|   |-- main.cpp                              # Entry point
+|   `-- *_test.cpp                            # Unit tests (one per module)
+|-- resources/
+|   `-- app.rc                                # Manifest and version info
+|-- .github/
+|   `-- workflows/build.yml                   # CI: build + test on every push/PR
+|-- .githooks/
+|   `-- pre-commit                            # Auto-formats staged files on commit
+|-- .clang-format                             # Code style configuration
+|-- .clang-tidy                               # Static analysis configuration
+|-- bass-booster-screenshot.png               # README application screenshot
+|-- CMakePresets.json                         # Configure/build/test presets
+|-- LICENSE                                   # License terms for this repository
+`-- CMakeLists.txt
 ```
 
 ## Code style
@@ -177,37 +182,24 @@ The project uses two LLVM tools to keep code clean:
 | `clang-format` | Auto-formats sources to Google C++ style (`.clang-format`) |
 | `clang-tidy` | Static analysis at build time (`.clang-tidy`) |
 
-`CLAUDE.md` contains additional local overrides used for this personal project.
-Treat those as repo-specific workflow preferences. For production or team code,
-default to Google C++ style (or the team's standard) unless the team explicitly
-adopts the same overrides.
+`CLAUDE.md` contains additional local overrides used for this personal
+repository. Treat those as repo-specific workflow rules.
 
-Both are **required to contribute**. CMake prints a `WARNING` during configure
-if either tool is missing, and CI enforces them on every push/PR.
+Both tools are expected for normal contributions. CMake prints a warning during
+configure if either tool is missing, and CI enforces them on push and pull
+request builds.
 
 ### Installing LLVM on Windows
 
-1. Go to the [LLVM releases page][llvm-releases]
-   and download the Windows installer -- look for a file named
-   `LLVM-<version>-win64.exe`.
-2. Run the installer. On the **"Add LLVM to the system PATH"** screen, select
-   **"Add LLVM to the system PATH for all users"** (or current user).
-3. Open a **new** terminal (the old one won't see the updated PATH) and verify:
+1. Go to the [LLVM releases page][llvm-releases] and download the Windows
+   installer.
+2. Run the installer and add LLVM to `PATH`.
+3. Open a new terminal and verify:
 
    ```bat
    clang-format --version
-   clang-tidy   --version
+   clang-tidy --version
    ```
-
-   Both commands should print a version string. If they print `'clang-format'
-   is not recognized`, the LLVM `bin\` directory is not on `PATH` -- add it
-   manually (typically `C:\Program Files\LLVM\bin`):
-
-   ```bat
-   setx PATH "%PATH%;C:\Program Files\LLVM\bin"
-   ```
-
-   Open a new terminal again and re-verify.
 
 4. Re-run CMake configure so it picks up the tools:
 
@@ -215,16 +207,14 @@ if either tool is missing, and CI enforces them on every push/PR.
    cmake -B build
    ```
 
-   You should now see `-- clang-format: ...` and `-- clang-tidy: ...` in the
-   configure output instead of warnings.
-
 ### Registering the pre-commit hook
 
-`cmake -B build` registers `.githooks` as the git hooks directory
-automatically. After that, every `git commit` auto-formats staged `.cpp`/`.hpp`
-files with `clang-format` before the commit is recorded. If `clang-format` is
-not on `PATH` the hook prints a warning and proceeds (so you can still commit
-without it installed locally -- CI will catch any formatting issues).
+`cmake -B build` registers `.githooks` as the local git hooks directory
+automatically. After that, every `git commit` auto-formats staged `.cpp` and
+`.hpp` files with `clang-format` before the commit is recorded.
+
+If `clang-format` is not on `PATH`, the hook prints a warning and proceeds, so
+you can still commit locally while CI catches formatting issues.
 
 ### Formatting all sources manually
 
@@ -234,14 +224,13 @@ cmake --build build --target format
 
 ### Disabling clang-tidy locally
 
-If you need to build without clang-tidy (e.g., for a quick local test), pass:
+If you need to build without clang-tidy for a quick local iteration, pass:
 
 ```bat
 cmake -B build -DENABLE_CLANG_TIDY=OFF
 ```
 
-This suppresses the warning and skips analysis. Do not land code built this way
--- the CI job always runs with clang-tidy enabled.
+Do not land code built this way without running the normal checks again.
 
 ## CI and branch protection
 
@@ -251,11 +240,11 @@ reflects the current status of `main`.
 To prevent merging broken code, enable branch protection in the GitHub
 repository settings:
 
-1. **Settings -> Branches -> Add branch protection rule** for `main`.
+1. **Settings -> Branches -> Add branch protection rule** for `main`
 2. Enable **Require status checks to pass before merging** and select the
-   `build` check.
-3. Enable **Require branches to be up to date before merging**.
-4. Enable **Do not allow bypassing the above settings**.
+   `build` check
+3. Enable **Require branches to be up to date before merging**
+4. Enable **Do not allow bypassing the above settings**
 
 With these rules in place, no PR can be merged and no direct push to `main`
 can succeed unless the CI build and all tests pass.
@@ -265,77 +254,101 @@ can succeed unless the CI build and all tests pass.
 In the simplest terms, it intercepts all audio playing through your default
 output device, boosts the low frequencies, and plays it back.
 
-### WASAPI loopback capture
+In more detail, the live pipeline captures audio from the current default render
+endpoint, applies a low-shelf bass boost, subtracts the original full-band
+signal, and renders only the added low-frequency delta back to that same
+endpoint. Rendering only the delta boosts bass without replaying a delayed copy
+of the entire mix.
 
-WASAPI lets you open the default render endpoint in **loopback mode**
-(`AUDCLNT_STREAMFLAGS_LOOPBACK`). This gives you a read view of the audio
-mixer's final output as a stream of raw PCM frames. A second WASAPI client is
-opened in normal shared-mode to **write back** the processed audio. The result
-is that all system audio is transparently intercepted, boosted, and returned
-before it reaches your hardware.
+### Capture and render setup
 
-The capture and render loops run on a dedicated high-priority thread
-(`AvSetMmThreadCharacteristicsW("Pro Audio", ...)`).
+The render side opens the current default output endpoint in shared mode and
+requires its mix format to be packed float32 stereo.
 
-### DSP chain (per audio buffer)
+The capture side uses the process loopback virtual device through
+`ActivateAudioInterfaceAsync`, wrapped in `loopback_capture_activation.cpp`, to
+obtain a loopback `IAudioClient` that excludes this process tree from capture.
+Excluding the app's own render stream prevents the feedback loop that would
+happen if the rendered bass delta were captured again.
 
-Each buffer goes through two stages in order:
+Process loopback captures in whatever format the render endpoint uses, so the
+pipeline reuses the negotiated render mix format as the capture format too.
 
-#### 1. Low-shelf biquad filter (`bass_boost_filter.hpp/.cpp`)
+The capture and render loops run on a dedicated high-priority thread using
+`AvSetMmThreadCharacteristicsW("Pro Audio", ...)`. If a stream call fails, the
+audio thread tries to reacquire the current default render endpoint and reopen
+both clients before giving up.
 
-A second-order IIR (infinite impulse response) filter derived from the
-[Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/) low-shelf formula.
+### Per-packet processing
 
-**What a biquad is:** A 2nd-order recursive filter described by the difference
-equation:
+Each captured packet goes through these steps:
 
-```
+1. `endpoint_audio_format` decodes the endpoint packet to interleaved stereo
+   float samples.
+2. `bass_boost_filter` applies a low-shelf biquad centered at 100 Hz.
+3. The pipeline subtracts the original samples from the filtered samples and
+   renders only the difference.
+
+#### Low-shelf biquad filter (`bass_boost_filter.hpp/.cpp`)
+
+A biquad is a second-order IIR (infinite impulse response) filter derived here
+from the [Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/)
+low-shelf formula.
+
+The difference equation is:
+
+```text
 y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2]
                - a1*y[n-1] - a2*y[n-2]
 ```
 
-Five coefficients (`b0, b1, b2, a1, a2`) fully describe the filter. The two
-`y[n-k]` feedback terms are stored in a 2-element delay line (`z1, z2`) per
-channel, updated every sample. This is O(1) per sample and extremely cheap.
+Five coefficients (`b0`, `b1`, `b2`, `a1`, `a2`) describe the filter. Two
+delay-line values per channel preserve history across audio buffers, so the
+output remains continuous instead of clicking at packet boundaries.
 
-**Low-shelf behaviour:** All frequencies below the shelf frequency (100 Hz) are
-boosted by `gain_db` dB. Frequencies above 100 Hz are passed through unchanged.
-The Q factor (0.707, Butterworth) controls how gradually the shelf rolls off at
-the cutoff -- Butterworth is maximally flat, meaning no ripple in either the
-passband or stopband.
+All frequencies below the shelf frequency (100 Hz) are boosted by `gain_db`
+dB. Frequencies above 100 Hz stay close to the original signal. The filter uses
+a Butterworth Q of 0.707 for a maximally flat response.
 
-**Slider mapping:** The slider position `p` in [0, 1] maps to gain via a
-square-root curve:
+#### Slider mapping
+
+The slider position `p` in `[0, 1]` maps to gain via a square-root curve:
 
 ```cpp
-gain_db = kMaxGainDb * sqrt(p);  // p=0 -> 0 dB, p=1 -> 12 dB
+gain_db = kMaxGainDb * sqrt(p);  // p=0 -> 0 dB, p=1 -> 18 dB
 ```
 
-The square-root curve is convex: at the midpoint of slider travel you get
-~70.7% of max gain rather than 50%, so bass boost is audible immediately when
-you move the slider.
+The square-root curve is convex, so the midpoint already produces about 70.7%
+of the maximum gain. That makes the boost audible early in the slider travel.
 
-#### 2. Output attenuation
+#### Why render only the delta?
 
-The shelf filter boosts bass frequencies by up to 12 dB (~4x linear gain),
-which would push bass peaks above +/-1.0 and cause hard digital clipping.
-Instead of clipping, the entire signal is attenuated by `1/sqrt(linear_gain)`
-after the filter. At 12 dB boost this gives an output gain of ~0.5: bass peaks
-land near full scale while mids and highs drop to half amplitude, making bass
-12 dB louder *relative* to everything else -- the characteristic "YouTube bass
-boost" sound.
+The low-shelf filter leaves mids and highs close to the original signal. By
+rendering `filter(signal) - signal` instead of the full filtered output, the
+app adds only the bass energy introduced by the shelf. That avoids the comb
+filtering that would come from replaying a delayed full-band copy of the system
+mix and removes the need for the older output attenuation stage.
+
+#### Harmonic exciter status
+
+`harmonic_exciter` is still part of the repository and has its own tests, but
+the current live `audio_pipeline` does not inject it into the render path. The
+active output path is the low-shelf bass delta described above.
 
 ### Thread safety
 
-Gain updates (`SetBoostLevel`) are issued from the UI thread and read on the
-audio thread. The gain parameter is stored in a `std::atomic<double>`, so no
-mutex is needed on the hot path.
+`SetBoostLevel` is called from the UI thread while the audio thread is running.
+The user-controlled DSP parameters are stored in atomics, so the audio thread
+can read them without taking locks on the hot path.
+
+## License
+
+See [LICENSE](LICENSE) for the license terms for this repository.
 
 [build-badge]:
 https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml/badge.svg
 [build-workflow]:
 https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml
-[vs2019-build-tools]: https://aka.ms/vs/16/release/vs_BuildTools.exe
 [vs2022-build-tools]: https://aka.ms/vs/17/release/vs_BuildTools.exe
 [cmake-download]: https://cmake.org/download/
 [vscode-cpptools]:
