@@ -381,8 +381,12 @@ struct EndpointAcquisition {
   return endpoint;
 }
 
+// WASAPI loopback capture client and its packet-pulling service, paired so
+// they can be set up together and moved into the pipeline as a unit.
 struct CaptureClientSetup {
+  // Owns the loopback stream configuration and lifetime.
   ScopedComPtr<IAudioClient> audio_client;
+  // Pulls captured packets from `audio_client`.
   ScopedComPtr<IAudioCaptureClient> service;
 };
 
@@ -412,9 +416,16 @@ struct CaptureClientSetup {
   return AudioPipelineInterface::Status::Ok();
 }
 
+// WASAPI render client, its buffer-writing service, and the negotiated mix
+// format, paired so they can be set up together and moved into the pipeline
+// as a unit.
 struct RenderClientSetup {
+  // Owns the render stream configuration and lifetime.
   ScopedComPtr<IAudioClient> audio_client;
+  // Writes processed frames into the render buffer owned by `audio_client`.
   ScopedComPtr<IAudioRenderClient> service;
+  // Negotiated mix format; also used as the capture format because process
+  // loopback captures in whatever format the render endpoint uses.
   ScopedWaveFormat format;
 };
 
@@ -467,6 +478,8 @@ struct RenderClientSetup {
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Combined capture and render setup, built during startup and recovery then
+// moved into the pipeline's long-lived members.
 struct StreamClientSetup {
   CaptureClientSetup capture;
   RenderClientSetup render;
@@ -490,10 +503,18 @@ struct StreamClientSetup {
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Non-owning snapshot of the resources needed by one drain pass. Assembled
+// from `RunningPipelineState` each iteration so `DrainCaptureQueue` has no
+// dependency on the pipeline's ownership model.
 struct ActiveStreamState {
+  // Queried for render buffer size before writing processed frames.
   IAudioClient* render_client;
+  // Pulls captured packets from the loopback stream.
   IAudioCaptureClient* capture_service;
+  // Writes processed frames into the render buffer.
   IAudioRenderClient* render_service;
+  // Render mix format reused as the capture format; process loopback
+  // captures in whatever format the render endpoint uses.
   WAVEFORMATEX* format;
   HarmonicExciter& exciter;
   BassBoostFilter& filter;
@@ -546,6 +567,9 @@ struct ActiveStreamState {
   return S_OK;
 }
 
+// Mutable references to every `AudioPipeline` member the audio thread needs.
+// Passed into the thread so recovery can swap in fresh clients without the
+// thread holding a back-pointer to the pipeline object.
 struct RunningPipelineState {
   ScopedComPtr<IMMDeviceEnumerator>& enumerator;
   ScopedComPtr<IMMDevice>& render_device;
@@ -553,6 +577,8 @@ struct RunningPipelineState {
   ScopedComPtr<IAudioClient>& render_client;
   ScopedComPtr<IAudioCaptureClient>& capture_service;
   ScopedComPtr<IAudioRenderClient>& render_service;
+  // Render mix format reused as the capture format; process loopback
+  // captures in whatever format the render endpoint uses.
   ScopedWaveFormat& render_format;
   BassBoostFilter& filter;
   HarmonicExciter& exciter;
