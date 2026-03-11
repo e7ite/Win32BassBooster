@@ -1,0 +1,26 @@
+{
+  // -------------------------------------------------------------------------
+  // clang-format on save
+  // Requires the Microsoft C/C++ extension (ms-vscode.cpptools).
+  // -------------------------------------------------------------------------
+  "editor.formatOnSave": true,
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  },
+  "[c]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  },
+  "C_Cpp.clang_format_style": "file",
+  // Point the formatter at the installed LLVM binary so it is found even when
+  // the VSCode extension host does not inherit the system PATH on Windows.
+  "C_Cpp.clang_format_path": "C:/Program Files/LLVM/bin/clang-format.exe",
+  "cmake.useCMakePresets": "always",
+
+  // -------------------------------------------------------------------------
+  // clang-tidy: run automatically on open / save via the cpptools code-analysis
+  // engine.  Results appear in the Problems panel.
+  // -------------------------------------------------------------------------
+  "C_Cpp.codeAnalysis.clangTidy.enabled": true,
+  "C_Cpp.codeAnalysis.runAutomatically": true,
+  "C_Cpp.codeAnalysis.clangTidy.path": "C:/Program Files/LLVM/bin/clang-tidy.exe"
+}

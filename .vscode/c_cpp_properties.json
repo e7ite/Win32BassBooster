@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "name": "Win32",
+      "intelliSenseMode": "windows-msvc-x64",
+      "cppStandard": "c++20",
+      "includePath": [
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/build/_deps/googletest-src/googletest/include"
+      ],
+      "defines": [
+        "_WIN32",
+        "WIN32",
+        "UNICODE",
+        "_UNICODE",
+        "NOMINMAX",
+        "_WIN32_WINNT=0x0A00",
+        "PLATFORM_WINDOWS"
+      ],
+      "windowsSdkVersion": "10.0.19041.0"
+    }
+  ],
+  "version": 4
+}
