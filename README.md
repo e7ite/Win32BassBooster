@@ -170,6 +170,7 @@ Use the status bar **launch target** selector to pick
 |   `-- pre-commit                            # Auto-formats staged files on commit
 |-- .clang-format                             # Code style configuration
 |-- .clang-tidy                               # Static analysis configuration
+|-- bass-booster-architecture.svg             # README high-level system diagram
 |-- bass-booster-screenshot.png               # README application screenshot
 |-- CMakePresets.json                         # Configure/build/test presets
 |-- LICENSE                                   # License terms for this repository
@@ -182,11 +183,10 @@ The project uses two LLVM tools to keep code clean:
 
 | Tool | Role |
 |---|---|
-| `clang-format` | Auto-formats sources to Google C++ style (`.clang-format`) |
-| `clang-tidy` | Static analysis at build time (`.clang-tidy`) |
+| `clang-format` | Auto-formats sources to Google C++ style (see `.clang-format` at project root) |
+| `clang-tidy` | Static analysis at build time (see `.clang-tidy` at project root) |
 
-`CLAUDE.md` contains additional local overrides used for this personal
-repository. Treat those as repo-specific workflow rules.
+[`CLAUDE.md`](CLAUDE.md) contains additional local code style and workflow overrides specific to this repository. Refer to it for repo-specific formatting and contribution rules.
 
 Both tools are expected for normal contributions. CMake prints a warning during
 configure if either tool is missing, and CI enforces them on push and pull
@@ -217,7 +217,7 @@ automatically. After that, every `git commit` auto-formats staged `.cpp` and
 `.hpp` files with `clang-format` before the commit is recorded.
 
 If `clang-format` is not on `PATH`, the hook prints a warning and proceeds, so
-you can still commit locally while CI catches formatting issues.
+you can still commit locally, but this may result in CI failures due to formatting issues, requiring additional commits to fix style problems.
 
 ### Formatting all sources manually
 
@@ -257,24 +257,30 @@ can succeed unless the CI build and all tests pass.
 In the simplest terms, it intercepts all audio playing through your default
 output device, boosts the low frequencies, and plays it back.
 
-In more detail, the live pipeline captures audio from the current default render
-endpoint, applies a low-shelf bass boost, subtracts the original full-band
+![Win32 Bass Booster high-level system diagram](bass-booster-architecture.svg)
+
+In more detail, the live pipeline captures audio headed to the default output
+device, applies a low-shelf bass boost, subtracts the original full-band
 signal, and renders only the added low-frequency delta back to that same
-endpoint. Rendering only the delta boosts bass without replaying a delayed copy
-of the entire mix.
+device. Rendering only the delta boosts bass without replaying a delayed copy
+of the full signal.
 
 ### Capture and render setup
 
 The render side opens the current default output endpoint in shared mode and
 requires its mix format to be packed float32 stereo.
 
-The capture side uses the process loopback virtual device through
+The capture side uses Windows process loopback through
 `ActivateAudioInterfaceAsync`, wrapped in `loopback_capture_activation.cpp`, to
-obtain a loopback `IAudioClient` that excludes this process tree from capture.
-Excluding the app's own render stream prevents the feedback loop that would
-happen if the rendered bass delta were captured again.
+obtain a loopback `IAudioClient`. In plain terms, process loopback means
+reading the audio headed to the default output device instead of recording from
+a microphone.
 
-Process loopback captures in whatever format the render endpoint uses, so the
+This activation path also excludes this process tree from capture. That
+prevents the rendered bass delta from being captured again and fed back into
+the processing path.
+
+That capture stream uses whatever format the render endpoint uses, so the
 pipeline reuses the negotiated render mix format as the capture format too.
 
 The capture and render loops run on a dedicated high-priority thread using

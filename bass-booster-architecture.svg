@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 600" role="img" aria-labelledby="title desc">
+  <title id="title">Win32 Bass Booster high-level system flow</title>
+  <desc id="desc">A left-to-right five-step diagram showing the app finding the current speakers, having to create an input path for reading audio from those speakers and an output path for playing audio back to them because Windows has no simple way to intercept and modify system audio, setting the input path to ignore the output path before boosting so added bass does not get captured and boosted again, turning up the lowest frequencies in the audio input path, and sending only the added bass through the output path so you hear stronger low end without replaying all system audio.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14171f" />
+      <stop offset="100%" stop-color="#1f2330" />
+    </linearGradient>
+    <linearGradient id="panel1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#203247" />
+      <stop offset="100%" stop-color="#29415c" />
+    </linearGradient>
+    <linearGradient id="panel2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f3942" />
+      <stop offset="100%" stop-color="#28505a" />
+    </linearGradient>
+    <linearGradient id="panel3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#213649" />
+      <stop offset="100%" stop-color="#29526a" />
+    </linearGradient>
+    <linearGradient id="panel4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2a3158" />
+      <stop offset="100%" stop-color="#394279" />
+    </linearGradient>
+    <linearGradient id="panel5" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#24374b" />
+      <stop offset="100%" stop-color="#2b4d65" />
+    </linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#68c9ff" />
+    </marker>
+    <style>
+      .card { stroke-width: 2; }
+      .card1 { fill: url(#panel1); stroke: #5e80a7; }
+      .card2 { fill: url(#panel2); stroke: #59a29c; }
+      .card3 { fill: url(#panel3); stroke: #63a9c9; }
+      .card4 { fill: url(#panel4); stroke: #7d88df; }
+      .card5 { fill: url(#panel5); stroke: #5d98b6; }
+      .accent { fill: none; stroke-width: 6; stroke-linecap: round; }
+      .accent1 { stroke: #7dd5ff; }
+      .accent2 { stroke: #63d7c0; }
+      .accent3 { stroke: #7bdfff; }
+      .accent4 { stroke: #a0a8ff; }
+      .accent5 { stroke: #84d7ff; }
+      .step-tag { fill: #8ecbff; font: 700 11px "Segoe UI", Arial, sans-serif; letter-spacing: 1.2px; text-anchor: end; }
+      .label { fill: #f7f8fb; font: 700 23px "Segoe UI", Arial, sans-serif; }
+      .body { fill: #c5cee3; font: 500 15px "Segoe UI", Arial, sans-serif; }
+      .halo { fill: #0f1220; stroke-width: 2; }
+      .halo1 { stroke: #7dd5ff; }
+      .halo2 { stroke: #63d7c0; }
+      .halo3 { stroke: #7bdfff; }
+      .halo4 { stroke: #a0a8ff; }
+      .halo5 { stroke: #84d7ff; }
+      .flow { fill: none; stroke: #68c9ff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .num { fill: #f7f8fb; font: 700 16px "Segoe UI", Arial, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+    </style>
+  </defs>
+
+  <rect width="1450" height="600" fill="url(#bg)" rx="28" ry="28" />
+
+  <path class="card card1" d="M64 100 H266 L290 124 V416 L266 440 H64 L40 416 V124 Z" />
+  <path class="accent accent1" d="M72 114 H180" />
+  <text x="228" y="134" class="step-tag">STEP</text>
+  <circle cx="250" cy="130" r="16" class="halo halo1" />
+  <text x="250" y="130" class="num">1</text>
+  <text x="66" y="178" class="label">Find Speakers</text>
+  <text x="66" y="220" class="body">The app finds the</text>
+  <text x="66" y="240" class="body">current speakers or</text>
+  <text x="66" y="260" class="body">headphones that</text>
+  <text x="66" y="280" class="body">system audio is</text>
+  <text x="66" y="300" class="body">already using.</text>
+
+  <path class="card card2" d="M344 140 H546 L570 164 V456 L546 480 H344 L320 456 V164 Z" />
+  <path class="accent accent2" d="M352 154 H470" />
+  <text x="508" y="174" class="step-tag">STEP</text>
+  <circle cx="530" cy="170" r="16" class="halo halo2" />
+  <text x="530" y="170" class="num">2</text>
+  <text x="346" y="218" class="label">Create Audio Paths</text>
+  <text x="346" y="260" class="body">Windows has no</text>
+  <text x="346" y="280" class="body">simple way to</text>
+  <text x="346" y="300" class="body">intercept system</text>
+  <text x="346" y="320" class="body">audio and modify it,</text>
+  <text x="346" y="340" class="body">so the app has to</text>
+  <text x="346" y="360" class="body">create an input path</text>
+  <text x="346" y="380" class="body">for reading audio</text>
+  <text x="346" y="400" class="body">from those speakers</text>
+  <text x="346" y="420" class="body">and an output path</text>
+  <text x="346" y="440" class="body">for playing it back.</text>
+
+  <path class="card card3" d="M624 180 H826 L850 204 V496 L826 520 H624 L600 496 V204 Z" />
+  <path class="accent accent3" d="M632 194 H758" />
+  <text x="788" y="214" class="step-tag">STEP</text>
+  <circle cx="810" cy="210" r="16" class="halo halo3" />
+  <text x="810" y="210" class="num">3</text>
+  <text x="626" y="258" class="label">Set Feedback Guard</text>
+  <text x="626" y="300" class="body">Before step 4,</text>
+  <text x="626" y="320" class="body">the app sets the</text>
+  <text x="626" y="340" class="body">input path to ignore</text>
+  <text x="626" y="360" class="body">what the output path</text>
+  <text x="626" y="380" class="body">plays. Otherwise the</text>
+  <text x="626" y="400" class="body">added bass would</text>
+  <text x="626" y="420" class="body">come back through</text>
+  <text x="626" y="440" class="body">the next boost pass</text>
+  <text x="626" y="460" class="body">and get louder again.</text>
+
+  <path class="card card4" d="M904 140 H1106 L1130 164 V456 L1106 480 H904 L880 456 V164 Z" />
+  <path class="accent accent4" d="M912 154 H1022" />
+  <text x="1068" y="174" class="step-tag">STEP</text>
+  <circle cx="1090" cy="170" r="16" class="halo halo4" />
+  <text x="1090" y="170" class="num">4</text>
+  <text x="906" y="218" class="label">Boost Bass</text>
+  <text x="906" y="260" class="body">With that guard set,</text>
+  <text x="906" y="280" class="body">the app turns up</text>
+  <text x="906" y="300" class="body">the lowest</text>
+  <text x="906" y="320" class="body">frequencies in the</text>
+  <text x="906" y="340" class="body">audio input path</text>
+  <text x="906" y="360" class="body">while keeping</text>
+  <text x="906" y="380" class="body">everything else</text>
+  <text x="906" y="400" class="body">mostly the same.</text>
+
+  <path class="card card5" d="M1184 100 H1386 L1410 124 V416 L1386 440 H1184 L1160 416 V124 Z" />
+  <path class="accent accent5" d="M1192 114 H1298" />
+  <text x="1348" y="134" class="step-tag">STEP</text>
+  <circle cx="1370" cy="130" r="16" class="halo halo5" />
+  <text x="1370" y="130" class="num">5</text>
+  <text x="1186" y="178" class="label">Play Added Bass</text>
+  <text x="1186" y="220" class="body">The output path</text>
+  <text x="1186" y="240" class="body">sends only the</text>
+  <text x="1186" y="260" class="body">added bass back</text>
+  <text x="1186" y="280" class="body">to those speakers,</text>
+  <text x="1186" y="300" class="body">so you hear more</text>
+  <text x="1186" y="320" class="body">low end without</text>
+  <text x="1186" y="340" class="body">replaying all audio.</text>
+
+  <path class="flow" d="M290 270 L320 310" />
+  <path class="flow" d="M570 310 L600 350" />
+  <path class="flow" d="M850 350 L880 310" />
+  <path class="flow" d="M1130 310 L1160 270" />
+</svg>
