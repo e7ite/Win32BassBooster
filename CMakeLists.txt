@@ -150,6 +150,13 @@ if(WIN32)
     add_library(endpoint_audio_format STATIC src/endpoint_audio_format.cpp)
     target_include_directories(endpoint_audio_format PUBLIC src)
     target_enable_clang_tidy(endpoint_audio_format)
+
+    add_library(audio_pipeline STATIC src/audio_pipeline.cpp)
+    target_include_directories(audio_pipeline PUBLIC src)
+    target_link_libraries(audio_pipeline PUBLIC
+        endpoint_audio_format bass_boost_filter harmonic_exciter
+        ole32 oleaut32 uuid avrt)
+    target_enable_clang_tidy(audio_pipeline)
 endif()
 
 # -----------------------------------------------------------------------
@@ -183,5 +190,13 @@ if(BUILD_TESTS)
         add_test(NAME endpoint_audio_format_test
                  COMMAND $<TARGET_FILE:endpoint_audio_format_test> --gtest_color=yes)
         target_enable_clang_tidy(endpoint_audio_format_test)
+
+        add_executable(audio_pipeline_test src/audio_pipeline_test.cpp)
+        target_link_libraries(audio_pipeline_test PRIVATE
+            audio_pipeline GTest::gtest_main)
+        target_include_directories(audio_pipeline_test PRIVATE src)
+        add_test(NAME audio_pipeline_test
+                 COMMAND $<TARGET_FILE:audio_pipeline_test> --gtest_color=yes)
+        target_enable_clang_tidy(audio_pipeline_test)
     endif()
 endif()
