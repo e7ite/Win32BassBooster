@@ -4,9 +4,8 @@
 #define WIN32BASSBOOSTER_SRC_ENDPOINT_AUDIO_FORMAT_HPP_
 
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-
 #include <audioclient.h>
+#include <windows.h>
 
 #include <cstdint>
 #include <vector>
@@ -23,8 +22,8 @@ struct StereoPcmBuffer {
 [[nodiscard]] bool SupportsDirectStereoFloatCopy(const WAVEFORMATEX& format);
 
 // Returns `StereoPcmBuffer`: `samples` is interleaved stereo float data
-// (L,R,...) and `frames` is the decoded frame count. Returns an empty
-// buffer when `src` is null or `frames` is 0.
+// (L,R,...) and `frames` is the decoded frame count. Returns an empty buffer
+// when `src` is null or `frames` is 0.
 [[nodiscard]] StereoPcmBuffer DecodeToStereoFloat(const BYTE* src,
                                                   uint32_t frames,
                                                   const WAVEFORMATEX& format);

@@ -54,7 +54,9 @@ namespace {
 - Do not use backticks for prose, formulas, or `#endif` trailing comments.
 - Keep comments ASCII-only.
 - Use correct spelling and punctuation; end every sentence with a period.
-- Wrap comments close to 80 columns at word boundaries.
+- Fill every comment line as close to column 80 as possible, breaking only at
+  word boundaries. Do not leave a line short when the next word would still
+  fit within 80 columns.
 - For non-obvious literal arguments (`0`, `nullptr`), add inline parameter
   labels.
 - Skip parameter labels for obvious standard-library calls (for example,

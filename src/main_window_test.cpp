@@ -37,10 +37,10 @@ class TestAudioPipeline : public AudioPipelineInterface {
   std::wstring name_ = L"Test Device";
 };
 
-// DestroyWindow posts teardown messages that can leak into the next test.
-// In live Win32 tests there is no API that auto-isolates or auto-clears the
-// thread message queue between `TEST` bodies; every approach (fixture or
-// helper) must explicitly drain it to keep tests deterministic.
+// DestroyWindow posts teardown messages that can leak into the next test. In
+// live Win32 tests there is no API that auto-isolates or auto-clears the thread
+// message queue between `TEST` bodies; every approach (fixture or helper) must
+// explicitly drain it to keep tests deterministic.
 void DrainPendingMessages() {
   MSG msg = {};
   while (PeekMessageW(&msg, /*hWnd=*/nullptr, /*wMsgFilterMin=*/0,

@@ -32,7 +32,7 @@ class HarmonicExciter {
   explicit HarmonicExciter(double sample_rate = kDefaultSampleRate);
 
   // Sets the harmonic blend: 0.0 = bypass, 1.0 = full effect. Clamped to [0,
-  // 1]. Thread-safe: may be called from any thread while the audio loop runs.
+  // 1]. Thread-safe: may be called from any thread while audio is running.
   void SetAmount(double amount);
 
   // Not thread-safe: call only when the audio loop is stopped, then `Reset()`.
@@ -62,8 +62,8 @@ class HarmonicExciter {
   };
 
   // IIR filters are recursive: each output depends on past outputs, so state
-  // must persist between `ProcessStereo()` calls. `z1` and `z2` hold the
-  // filter memory one and two samples behind the current sample.
+  // must persist between `ProcessStereo()` calls. `z1` and `z2` hold the filter
+  // memory one and two samples behind the current sample.
   struct DelayLine {
     double z1 = 0.0;
     double z2 = 0.0;
@@ -82,8 +82,8 @@ class HarmonicExciter {
                             DelayLine& delay) noexcept;
 
   // `std::atomic` is lock-free, so the audio loop can read the blend amount
-  // without ever waiting - required because the audio loop has a hard
-  // real-time deadline; missing it causes audio dropouts.
+  // without ever waiting - required because the audio loop has a hard real-time
+  // deadline; missing it causes audio dropouts.
   std::atomic<double> blend_amount_ = 0.0;
 
   // Precomputed at construction and on `SetSampleRate`; stable between calls.

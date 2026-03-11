@@ -1,5 +1,5 @@
-﻿// Abstract contract for the audio pipeline. Lets tests substitute a lightweight
-// stand-in without opening a real audio device.
+﻿// Abstract contract for the audio pipeline. Lets tests substitute a
+// lightweight stand-in without opening a real audio device.
 
 #ifndef WIN32BASSBOOSTER_SRC_AUDIO_PIPELINE_INTERFACE_HPP_
 #define WIN32BASSBOOSTER_SRC_AUDIO_PIPELINE_INTERFACE_HPP_
@@ -33,8 +33,7 @@ class AudioPipelineInterface {
 
   virtual ~AudioPipelineInterface() = default;
 
-  // Performs one-time setup if needed, then starts the audio processing
-  // thread.
+  // Performs one-time setup if needed, then starts the audio processing thread.
   // On failure, returns the failing code plus a readable error message.
   [[nodiscard]] virtual Status Start() = 0;
 

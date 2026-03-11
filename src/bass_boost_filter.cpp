@@ -32,8 +32,7 @@ struct ShelfParams {
 };
 
 [[nodiscard]] BiquadCoeffs ComputeCoeffs(ShelfParams params) {
-  // Audio EQ Cookbook -- Low Shelf
-  // https://www.w3.org/TR/audio-eq-cookbook/
+  // Audio EQ Cookbook -- Low Shelf https://www.w3.org/TR/audio-eq-cookbook/
   // `a`: linear amplitude ratio for the shelf. /40 (not /20) because a low
   // shelf applies half the gain at its midpoint - the cookbook defines it this
   // way so the shelf gain at `w0` equals exactly `gain_db` dB.

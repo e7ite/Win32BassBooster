@@ -19,8 +19,8 @@ constexpr float kBufSampleC = 0.8F;
 
 constexpr double kGain12dB = 12.0;
 
-// At 0 dB the shelf filter is transparent (H(z) = 1); every output sample
-// must exactly equal the corresponding input.
+// At 0 dB the shelf filter is transparent (H(z) = 1); every output sample must
+// exactly equal the corresponding input.
 TEST(BassBoostFilterTest, ZeroGainIsUnity) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(0.0);
@@ -34,8 +34,8 @@ TEST(BassBoostFilterTest, ZeroGainIsUnity) {
   EXPECT_NEAR(buf[4], kBufSampleC, 1e-5F);
 }
 
-// H(DC) = (b0 + b1 + b2) / (1 + a1 + a2): the exact zero-frequency gain.
-// A low shelf at +12 dB must amplify DC by more than 1.5x.
+// H(DC) = (b0 + b1 + b2) / (1 + a1 + a2): the exact zero-frequency gain. A
+// low shelf at +12 dB must amplify DC by more than 1.5x.
 TEST(BassBoostFilterTest, BassBoostedAt100Hz) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(kGain12dB);
@@ -45,9 +45,9 @@ TEST(BassBoostFilterTest, BassBoostedAt100Hz) {
   EXPECT_GT(dc_gain, 1.5);
 }
 
-// Alternating +1/-1 (Nyquist) is far above the 100 Hz shelf; the filter's
-// poles sit near z = 1, so the response at z = -1 is essentially unity and
-// the transient resolves within a few samples.
+// Alternating +1/-1 (Nyquist) is far above the 100 Hz shelf; the filter's poles
+// sit near z = 1, so the response at z = -1 is essentially unity and the
+// transient resolves within a few samples.
 TEST(BassBoostFilterTest, HighFreqUnaffected) {
   BassBoostFilter filter(kSampleRate);
   constexpr double kGain15dB = 15.0;

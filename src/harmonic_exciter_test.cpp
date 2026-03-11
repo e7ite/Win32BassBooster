@@ -30,8 +30,8 @@ TEST(HarmonicExciterTest, BypassAtZeroAmount) {
 TEST(HarmonicExciterTest, AddsEnergyAtMaxAmount) {
   HarmonicExciter exciter(kSampleRate);
   exciter.SetAmount(1.0);
-  // DC input causes the LPF to produce a small but non-zero output on the
-  // first sample; the rectifier and HPF pass it; the output exceeds 1.0.
+  // DC input causes the LPF to produce a small but non-zero output on the first
+  // sample; the rectifier and HPF pass it; the output exceeds 1.0.
   float buf[] = {1.0F, 1.0F};
   exciter.ProcessStereo(buf);
   EXPECT_GT(buf[0], 1.0F);
@@ -40,13 +40,13 @@ TEST(HarmonicExciterTest, AddsEnergyAtMaxAmount) {
 TEST(HarmonicExciterTest, HighFreqUnaffected) {
   HarmonicExciter exciter(kSampleRate);
   exciter.SetAmount(1.0);
-  // Nyquist-rate signal (alternating +/-1) is rejected by the 100 Hz LPF,
-  // so the exciter contributes nothing and the output stays at +/-1.
+  // Nyquist-rate signal (alternating +/-1) is rejected by the 100 Hz LPF, so
+  // the exciter contributes nothing and the output stays at +/-1.
   float buf[] = {1.0F, 1.0F, -1.0F, -1.0F, 1.0F, 1.0F, -1.0F, -1.0F,
                  1.0F, 1.0F, -1.0F, -1.0F, 1.0F, 1.0F, -1.0F, -1.0F};
   exciter.ProcessStereo(buf);
-  // buf[12] and buf[14] are L-channel samples of frames 6 and 7; checking
-  // two consecutive settled frames confirms the LPF transient is fully gone.
+  // buf[12] and buf[14] are L-channel samples of frames 6 and 7; checking two
+  // consecutive settled frames confirms the LPF transient is fully gone.
   EXPECT_NEAR(std::abs(buf[12]), 1.0F, 0.01F);
   EXPECT_NEAR(std::abs(buf[14]), 1.0F, 0.01F);
 }

@@ -3,9 +3,8 @@
 #include "audio_pipeline.hpp"
 
 // clang-format off
-// initguid.h must precede functiondiscoverykeys_devpkey.h:
-// `DEFINE_PROPERTYKEY` / `DEFINE_GUID` emit definitions only when `INITGUID`
-// is set.
+// initguid.h must precede functiondiscoverykeys_devpkey.h: `DEFINE_PROPERTYKEY`
+// and `DEFINE_GUID` emit definitions only when `INITGUID` is set.
 #include <initguid.h>
 // clang-format on
 
@@ -26,8 +25,8 @@
 namespace {
 
 // 20 ms is the lowest buffer duration that avoids glitches on most Windows
-// hardware while keeping latency perceptually invisible.
-// WASAPI measures time in 100-nanosecond units; 20 ms = 200,000 units.
+// hardware while keeping latency perceptually invisible. WASAPI measures time
+// in 100-nanosecond units; 20 ms = 200,000 units.
 constexpr REFERENCE_TIME k20Ms = 200'000;
 
 // 100-nanosecond units per millisecond; used to convert `k20Ms` to wall time.
@@ -45,12 +44,12 @@ using ScopedComPtr = std::unique_ptr<T, AudioPipeline::ComRelease>;
 using ScopedWaveFormat =
     std::unique_ptr<WAVEFORMATEX, AudioPipeline::CoTaskMemFreeDeleter>;
 
-// Returns true when `failure` indicates the endpoint or session was
-// invalidated but a fresh client pair on the current default device may
-// succeed; returns false for all other failures.
+// Returns true when `failure` indicates the endpoint or session was invalidated
+// but a fresh client pair on the current default device may succeed; returns
+// false for all other failures.
 [[nodiscard]] bool IsRecoverableStreamFailure(HRESULT failure) {
-  // These errors indicate the current audio endpoint/session became invalid but
-  // may succeed after reopening clients on the current default endpoint.
+  // These errors indicate the current audio endpoint/session became invalid
+  // but may succeed after reopening clients on the current default endpoint.
   return failure == AUDCLNT_E_DEVICE_INVALIDATED ||
          failure == AUDCLNT_E_RESOURCES_INVALIDATED ||
          failure == AUDCLNT_E_SERVICE_NOT_RUNNING;
@@ -80,8 +79,8 @@ void FinalizeThread(std::atomic<bool>& running, HANDLE task) {
   AvRevertMmThreadCharacteristics(task);
 }
 
-// Stops both clients and finalizes the thread when both are non-null;
-// falls back to `FinalizeThread` when either client is null.
+// Stops both clients and finalizes the thread when both are non-null; falls
+// back to `FinalizeThread` when either client is null.
 void StopClientsAndFinalizeIfReady(IAudioClient* capture_audio_client,
                                    IAudioClient* render_audio_client,
                                    std::atomic<bool>& running, HANDLE task) {
@@ -95,7 +94,7 @@ void StopClientsAndFinalizeIfReady(IAudioClient* capture_audio_client,
 
 // Releases the current capture buffer and writes the next pending packet size
 // into `packet_size`. Returns `S_OK` on success; otherwise returns the first
-// failing HRESULT.
+// failing `HRESULT`.
 [[nodiscard]] HRESULT ReleaseAndQueryNextPacket(
     IAudioCaptureClient& audio_capture_client, UINT32 frames,
     UINT32& packet_size) {
@@ -286,9 +285,9 @@ struct CapturedPacket {
   return AudioPipelineInterface::Status::Ok();
 }
 
-// Writes the friendly name of `render_device` into `endpoint_name`. Falls
-// back to "Default Render Device" when the property store is unavailable or
-// the name is empty.
+// Writes the friendly name of `render_device` into `endpoint_name`. Falls back
+// to "Default Render Device" when the property store is unavailable or the name
+// is empty.
 void ReadEndpointName(IMMDevice* render_device, std::wstring& endpoint_name) {
   if (render_device == nullptr) {
     endpoint_name = L"Default Render Device";
@@ -329,8 +328,8 @@ struct EndpointAcquisition {
 
   IMMDeviceEnumerator* raw_enum = nullptr;
   // COM expects a generic void** out-parameter. This cast is safe because
-  // `CoCreateInstance` only writes an interface pointer value for the
-  // requested IID into `raw_enum`; it does not dereference through void**.
+  // `CoCreateInstance` only writes an interface pointer value for the requested
+  // IID into `raw_enum`; it does not dereference through void**.
   if (const HRESULT create_enumerator = CoCreateInstance(
           __uuidof(MMDeviceEnumerator),
           /*pUnkOuter=*/nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
@@ -488,9 +487,9 @@ struct ActiveStreamState {
   BassBoostFilter& filter;
 };
 
-// Processes all pending capture packets through the DSP chain and writes
-// them to the render client. Returns `S_OK` when the queue is empty or stop
-// was requested; otherwise returns the first failing HRESULT.
+// Processes all pending capture packets through the DSP chain and writes them
+// to the render client. Returns `S_OK` when the queue is empty or stop was
+// requested; otherwise returns the first failing HRESULT.
 [[nodiscard]] HRESULT DrainCaptureQueue(ActiveStreamState& stream,
                                         std::stop_token stoken) {
   if (stream.audio_capture_client == nullptr ||
@@ -552,8 +551,8 @@ struct RunningPipelineState {
 };
 
 // Attempts to recover from a stream failure by re-acquiring the default
-// endpoint and reopening both clients. Returns true when recovery succeeds
-// and both streams are restarted; returns false otherwise.
+// endpoint and reopening both clients. Returns true when recovery succeeds and
+// both streams are restarted; returns false otherwise.
 [[nodiscard]] bool RecoverStreamFailure(RunningPipelineState& state,
                                         HRESULT failure,
                                         std::stop_token stoken) {
@@ -619,9 +618,9 @@ struct RunningPipelineState {
          RecoverStreamFailure(state, render_start, stoken);
 }
 
-// Audio thread entry point. Registers for MMCSS priority, starts both
-// streams, and polls the capture queue until stop is requested or an
-// unrecoverable failure occurs.
+// Audio thread entry point. Registers for MMCSS priority, starts both streams,
+// and polls the capture queue until stop is requested or an unrecoverable
+// failure occurs.
 void RunAudioThreadLoop(RunningPipelineState& state, std::stop_token stoken) {
   DWORD task_index = 0;
   HANDLE task =

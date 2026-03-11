@@ -1,5 +1,5 @@
-// Primary application window.
-// Resizable and theme-aware, with a header panel, bass slider, and info footer.
+// Primary application window. Resizable and theme-aware, with a header panel,
+// bass slider, and info footer.
 
 #ifndef WIN32BASSBOOSTER_SRC_MAIN_WINDOW_HPP_
 #define WIN32BASSBOOSTER_SRC_MAIN_WINDOW_HPP_
@@ -21,8 +21,7 @@ class MainWindow {
   MainWindow(const MainWindow&) = delete;
   MainWindow& operator=(const MainWindow&) = delete;
 
-  // Creates and shows the window. Returns false if Win32 window creation
-  // fails.
+  // Creates and shows the window. Returns false if Win32 window creation fails.
   [[nodiscard]] bool Create(HINSTANCE instance, int cmd_show);
 
   // Runs the Win32 message loop until `WM_QUIT`. Returns the process exit code.

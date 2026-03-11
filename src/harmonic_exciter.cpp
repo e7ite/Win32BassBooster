@@ -38,9 +38,9 @@ void HarmonicExciter::ProcessStereo(std::span<float> samples) {
 
   // Per-sample exciter chain: the LPF isolates the bass fundamental, then
   // full-wave rectification (`std::abs`) folds negative half-cycles upward.
-  // That nonlinear fold produces only even harmonics (2nd, 4th, ...) - the
-  // warm octave-up character. The HPF then strips the rectified fundamental
-  // so only the new harmonics remain, which are blended into the dry signal.
+  // That nonlinear fold produces only even harmonics (2nd, 4th, ...) - the warm
+  // octave-up character. The HPF then strips the rectified fundamental so only
+  // the new harmonics remain, which are blended into the dry signal.
   for (size_t i = 0; i < samples.size(); i += kChannels) {
     // Interleaved stereo frame: `samples[i]` is left and `samples[i + 1]` is
     // right.

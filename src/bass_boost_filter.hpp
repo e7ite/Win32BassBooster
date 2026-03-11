@@ -8,11 +8,11 @@
 #include <atomic>
 #include <span>
 
-// A biquad is a second-order IIR (recursive) filter. `b0`/`b1`/`b2` weight
-// the current and two previous inputs (feedforward path); `a1`/`a2` weight
-// the two previous outputs (feedback path). Defaults give a unity (passthrough)
-// response. Plain struct so tests can inspect computed values without
-// accessing private state.
+// A biquad is a second-order IIR (recursive) filter. `b0`/`b1`/`b2` weight the
+// current and two previous inputs (feedforward path); `a1`/`a2` weight the two
+// previous outputs (feedback path). Defaults give a unity (passthrough)
+// response. Plain struct so tests can inspect computed values without accessing
+// private state.
 struct BiquadCoeffs {
   double b0 = 1.0;
   double b1 = 0.0;
@@ -49,8 +49,8 @@ class BassBoostFilter {
 
   explicit BassBoostFilter(double sample_rate = kDefaultSampleRate);
 
-  // Sets gain in dB. Clamped to [`kMinGainDb`, `kMaxGainDb`].
-  // Thread-safe: may be called from any thread while the audio loop runs.
+  // Sets gain in dB. Clamped to [`kMinGainDb`, `kMaxGainDb`]. Thread-safe:
+  // may be called from any thread while the audio loop runs.
   void SetGainDb(double gain_db);
 
   // Sets the shelf cutoff in Hz. Clamped to [20 Hz, 0.4 x `sample_rate`] to
@@ -68,7 +68,7 @@ class BassBoostFilter {
   void ProcessStereo(std::span<float> samples);
 
   // Processes a single channel from a buffer in place. `channel` selects which
-  // delay line to use.
+  // delay-line state to use.
   void ProcessMono(std::span<float> samples, Channel channel);
 
   [[nodiscard]] double gain_db() const noexcept { return gain_db_.load(); }

@@ -48,11 +48,10 @@ class AudioPipeline final : public AudioPipelineInterface {
   }
 
   // Public because anonymous-namespace helpers in `audio_pipeline.cpp` reuse
-  // this deleter for temporary COM ownership while `ComPtr` stays private.
-  // COM objects are reference-counted. `Release()` decrements the count and
-  // frees the object when it reaches zero - the COM equivalent of delete.
-  // This custom deleter lets `unique_ptr` manage COM lifetimes without calling
-  // delete.
+  // this deleter for temporary COM ownership while `ComPtr` stays private. COM
+  // objects are reference-counted. `Release()` decrements the count and frees
+  // the object when it reaches zero - the COM equivalent of delete. This custom
+  // deleter lets `unique_ptr` manage COM lifetimes without calling delete.
   struct ComRelease {
     template <typename T>
     void operator()(T* ptr) const noexcept {

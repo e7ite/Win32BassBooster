@@ -9,8 +9,8 @@
 namespace {
 
 // Programmatic DPI awareness as a belt-and-suspenders complement to the
-// manifest declaration.  Loaded at runtime so the binary still runs on
-// older Windows versions that lack shcore.dll.
+// manifest declaration. Loaded at runtime so the binary still runs on older
+// Windows versions that lack shcore.dll.
 void EnableHighDpi() {
   using FnSetProcessDpiAwareness = HRESULT(WINAPI*)(int);
   HMODULE shcore = LoadLibraryW(L"shcore.dll");

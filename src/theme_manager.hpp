@@ -40,8 +40,8 @@ struct ColorRange {
   COLORREF to = 0;
 };
 
-// Returns a colour linearly interpolated across `range`.
-// `blend`=0.0 returns `range.from`; `blend`=1.0 returns `range.to`.
+// Returns a colour linearly interpolated across `range`. `blend`=0.0 returns
+// `range.from`; `blend`=1.0 returns `range.to`.
 [[nodiscard]] COLORREF BlendColor(ColorRange range, float blend);
 
 }  // namespace theme_manager

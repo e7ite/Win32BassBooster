@@ -55,8 +55,8 @@ float DecodeInt24Sample(const BYTE* sample_bytes) {
   constexpr int kInt24HighByteShift = 24;
   constexpr int kInt24MiddleByteShift = 16;
   constexpr int kInt24LowByteShift = 8;
-  // Preserve sign while widening 24-bit PCM to int32; losing it flips
-  // polarity for negative samples and introduces distortion.
+  // Preserve sign while widening 24-bit PCM to int32; losing it flips polarity
+  // for negative samples and introduces distortion.
   const int32_t sample =
       (static_cast<int32_t>(sample_bytes[2]) << kInt24HighByteShift) |
       (static_cast<int32_t>(sample_bytes[1]) << kInt24MiddleByteShift) |
