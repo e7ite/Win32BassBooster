@@ -1,0 +1,21 @@
+---
+# Only report diagnostics for headers inside our src/ directory so that
+# Windows SDK and Google Test headers don't produce noise.
+HeaderFilterRegex: ".*Win32BassBooster[/\\\\]src[/\\\\].*\\.hpp"
+
+# Apply the project .clang-format style when --fix-errors rewrites code.
+FormatStyle: file
+
+Checks: >-
+  bugprone-*,
+  clang-analyzer-*,
+  readability-*,
+  -bugprone-throwing-static-initialization,
+  -clang-analyzer-cplusplus.NewDeleteLeaks
+  
+
+# -bugprone-throwing-static-initialization: Google Test registers every TEST/
+#   TEST_F via a static initializer; there is no way to avoid this in user code.
+#
+# -clang-analyzer-cplusplus.NewDeleteLeaks: produces false positives for memory
+#   allocated by CoTaskMemFree / COM that clang-analyzer cannot track.
