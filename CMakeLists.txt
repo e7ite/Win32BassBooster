@@ -151,6 +151,11 @@ if(WIN32)
     target_include_directories(endpoint_audio_format PUBLIC src)
     target_enable_clang_tidy(endpoint_audio_format)
 
+    add_library(theme_manager STATIC src/theme_manager.cpp)
+    target_include_directories(theme_manager PUBLIC src)
+    target_link_libraries(theme_manager PUBLIC dwmapi uxtheme)
+    target_enable_clang_tidy(theme_manager)
+
     add_library(audio_pipeline STATIC src/audio_pipeline.cpp)
     target_include_directories(audio_pipeline PUBLIC src)
     target_link_libraries(audio_pipeline PUBLIC
@@ -198,5 +203,13 @@ if(BUILD_TESTS)
         add_test(NAME audio_pipeline_test
                  COMMAND $<TARGET_FILE:audio_pipeline_test> --gtest_color=yes)
         target_enable_clang_tidy(audio_pipeline_test)
+
+        add_executable(theme_manager_test src/theme_manager_test.cpp)
+        target_link_libraries(theme_manager_test PRIVATE
+            theme_manager GTest::gtest_main)
+        target_include_directories(theme_manager_test PRIVATE src)
+        add_test(NAME theme_manager_test
+                 COMMAND $<TARGET_FILE:theme_manager_test> --gtest_color=yes)
+        target_enable_clang_tidy(theme_manager_test)
     endif()
 endif()
