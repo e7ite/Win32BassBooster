@@ -105,10 +105,12 @@ void BassBoostFilter::ProcessStereo(std::span<float> samples) {
     // accumulating across recursive taps; cast back to float at the buffer
     // boundary where the precision loss happens only once per sample and to
     // match WASAPI's 32-bit float format.
-    samples[i] = static_cast<float>(
-        ProcessSample(samples[i], coeffs_, z1_[kLeftIndex], z2_[kLeftIndex]));
-    samples[i + 1] = static_cast<float>(ProcessSample(
-        samples[i + 1], coeffs_, z1_[kRightIndex], z2_[kRightIndex]));
+    samples[i] =
+        static_cast<float>(ProcessSample(samples[i], coeffs_, z1_[kLeftIndex],
+                                         z2_[kLeftIndex]));
+    samples[i + 1] =
+        static_cast<float>(ProcessSample(samples[i + 1], coeffs_,
+                                         z1_[kRightIndex], z2_[kRightIndex]));
   }
 }
 

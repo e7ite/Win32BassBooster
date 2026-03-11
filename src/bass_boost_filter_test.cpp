@@ -232,9 +232,10 @@ TEST(BassBoostFilterTest, SetSampleRateUpdatesCoefficients) {
   filter.SetSampleRate(kNewSampleRate);
   const BiquadCoeffs& after = filter.coefficients();
   // Coefficients depend on sample rate; at least one must change.
-  const bool coeffs_changed = std::abs(before.b0 - after.b0) > 1e-9 ||
-                              std::abs(before.b1 - after.b1) > 1e-9 ||
-                              std::abs(before.a1 - after.a1) > 1e-9;
+  const bool coeffs_changed =
+      std::abs(before.b0 - after.b0) > 1e-9 ||
+      std::abs(before.b1 - after.b1) > 1e-9 ||
+      std::abs(before.a1 - after.a1) > 1e-9;
   EXPECT_TRUE(coeffs_changed);
 }
 

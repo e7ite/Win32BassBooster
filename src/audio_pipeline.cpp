@@ -579,8 +579,8 @@ struct RunningPipelineState {
     return false;
   }
 
-  const double sample_rate =
-      static_cast<double>(clients.capture.capture_format->nSamplesPerSec);
+  const double sample_rate = static_cast<double>(
+      clients.capture.capture_format->nSamplesPerSec);
   state.filter.SetSampleRate(sample_rate);
   state.exciter.SetSampleRate(sample_rate);
 
@@ -701,8 +701,8 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
     return status;
   }
 
-  const double sample_rate =
-      static_cast<double>(clients.capture.capture_format->nSamplesPerSec);
+  const double sample_rate = static_cast<double>(
+      clients.capture.capture_format->nSamplesPerSec);
   filter_.SetSampleRate(sample_rate);
   exciter_.SetSampleRate(sample_rate);
 
@@ -721,18 +721,19 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
   running_.store(true);
 
   audio_thread_ = std::jthread([this](std::stop_token stoken) {
-    RunningPipelineState state{.enumerator = enumerator_,
-                               .render_device = render_device_,
-                               .capture_audio_client = capture_audio_client_,
-                               .render_audio_client = render_audio_client_,
-                               .audio_capture_client = audio_capture_client_,
-                               .audio_render_client = audio_render_client_,
-                               .capture_format = capture_format_,
-                               .render_format = render_format_,
-                               .filter = filter_,
-                               .exciter = exciter_,
-                               .running = running_,
-                               .endpoint_name = endpoint_name_};
+    RunningPipelineState state{
+        .enumerator = enumerator_,
+        .render_device = render_device_,
+        .capture_audio_client = capture_audio_client_,
+        .render_audio_client = render_audio_client_,
+        .audio_capture_client = audio_capture_client_,
+        .audio_render_client = audio_render_client_,
+        .capture_format = capture_format_,
+        .render_format = render_format_,
+        .filter = filter_,
+        .exciter = exciter_,
+        .running = running_,
+        .endpoint_name = endpoint_name_};
     RunAudioThreadLoop(state, std::move(stoken));
   });
   return AudioPipelineInterface::Status::Ok();

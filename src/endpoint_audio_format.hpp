@@ -4,8 +4,9 @@
 #define WIN32BASSBOOSTER_SRC_ENDPOINT_AUDIO_FORMAT_HPP_
 
 #define WIN32_LEAN_AND_MEAN
-#include <audioclient.h>
 #include <windows.h>
+
+#include <audioclient.h>
 
 #include <cstdint>
 #include <vector>
