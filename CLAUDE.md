@@ -592,3 +592,354 @@ void OpenDevice(std::wstring_view endpoint_id) {
 }
 ```
 
+### Commits
+- Keep commits small and single-purpose (target: <=100 changed lines when
+  practical).
+- Include corresponding tests in the same commit as behavior changes.
+- Commit messages should include:
+  - Why the change is needed, such as what would happen if not added.
+  - Main alternatives considered and why they were not chosen.
+  - When the change modifies existing behavior or structure, state the before
+    and after so the reviewer can understand the delta without reading the
+    diff.
+
+```text
+Good commit sequence:
+1) Add decode-strategy interface and wiring (+tests).
+2) Add mono decode behavior (+tests).
+3) Add stereo decode behavior (+tests).
+```
+
+```text
+Bad commit message (no before/after for a structural change):
+Refactor decode dispatch.
+
+Why:
+- Repeated format checks are slow.
+
+Good commit message:
+Refactor decode dispatch to one-time format selection.
+
+Before: every sample hits a format switch in the inner loop.
+After: format is resolved once before the loop; inner loop calls
+the selected decoder directly.
+
+Why:
+- Removes repeated per-sample format checks from the hot loop.
+
+Alternatives considered:
+- Keep repeated switch in DecodeSample (rejected: duplicates logic).
+- Runtime polymorphism in hot loop (rejected: extra indirection cost).
+```
+
+### Testing
+- Prefer `TEST()` over `TEST_F()`. Only use a fixture when `SetUp()` and
+  `TearDown()` genuinely manage a resource lifecycle (for example, creating and
+  destroying a real Win32 window). Sharing a constant or a trivially
+  constructed object is not a reason for a fixture.
+
+```cpp
+// Bad: fixture just to share a constant.
+class ToneFilterTest : public ::testing::Test {
+ protected:
+  static constexpr double kRateHz = 48000.0;
+};
+TEST_F(ToneFilterTest, GainIsZero) { ... }
+
+// Good: constant declared inline where it is needed.
+TEST(ToneFilterTest, GainIsZero) {
+  ToneFilter filter(48000.0);
+  ...
+}
+```
+
+- In `*_test.cpp`, if the paired production header uses a named namespace, wrap
+  the tests in that same namespace.
+- Use PascalCase for test suite names (the first argument to `TEST()` and
+  `TEST_F()`).
+
+```cpp
+// Bad: snake_case suite name.
+TEST(theme_manager_test, BlendColorAtT0ReturnsBase) { ... }
+
+// Good: PascalCase suite name.
+TEST(ThemeManagerTest, BlendColorAtT0ReturnsBase) { ... }
+```
+
+- Prefer `EXPECT_*` over `ASSERT_*`. Use `ASSERT_*` only when the remainder of
+  the test is meaningless if the condition fails.
+
+```cpp
+// Bad: first failure aborts; later assertions never run.
+ASSERT_GT(filter.gain_db(), 0.0);
+ASSERT_LT(filter.gain_db(), ToneFilter::kMaxLevelDb);
+
+// Good: all failures reported in one run.
+EXPECT_GT(filter.gain_db(), 0.0);
+EXPECT_LT(filter.gain_db(), ToneFilter::kMaxLevelDb);
+
+// ASSERT_* only when later code would crash without this:
+ASSERT_NE(hwnd, nullptr);  // the rest of the test dereferences hwnd.
+```
+
+- Keep `EXPECT_*` and `ASSERT_*` at top-level `TEST()` and `TEST_F()` scope.
+  Avoid putting them in helper functions, loops, constructors or destructors,
+  or fixture `SetUp()` and `TearDown()`.
+
+```cpp
+// Bad: assertion in helper hides call-site context.
+void ExpectValidRange(int min, int max) {
+  ASSERT_LT(min, max);
+}
+TEST(ControlTest, SliderRange) {
+  ExpectValidRange(1000, 0);
+}
+
+// Good: helper returns data; assertion stays in the test body.
+bool IsValidRange(int min, int max) {
+  return min < max;
+}
+TEST(ControlTest, SliderRange) {
+  ASSERT_TRUE(IsValidRange(0, 1000));
+}
+```
+
+- Avoid `EXPECT_*` and `ASSERT_*` inside loops. Use matchers or parameterized
+  tests so failures include clear element and case context.
+
+```cpp
+// Bad: failure in loop gives weak context.
+for (int value : values) {
+  EXPECT_EQ(value, 1);
+}
+
+// Good: matcher reports which element failed.
+EXPECT_THAT(values, ::testing::Each(::testing::Eq(1)));
+```
+
+- Do not introduce a single-use variable just to pass it to an assertion.
+  Inline the expression so failure messages show the actual code that produced
+  the value.
+
+```cpp
+// Bad: extra variable obscures what is being tested.
+const double gain = filter.gain_db();
+EXPECT_NEAR(gain, 12.0, 0.001);
+
+// Good: failure message shows the actual expression.
+EXPECT_NEAR(filter.gain_db(), 12.0, 0.001);
+```
+
+- Include only the data each test needs. Irrelevant setup buried in helpers
+  hides what the test is actually checking.
+
+```cpp
+// Bad: reader must chase SetUpFilter to know what it does.
+TEST(ToneFilterTest, ControlAtMax) {
+  ToneFilter filter(48000.0);
+  SetUpFilter(filter);  // does it reset? warm up? set gain?
+  filter.SetControlPosition(0.0);
+  EXPECT_NEAR(filter.gain_db(), ToneFilter::kMaxLevelDb, 0.001);
+}
+
+// Good: everything the test needs is right here.
+TEST(ToneFilterTest, ControlAtMax) {
+  ToneFilter filter(48000.0);
+  filter.SetControlPosition(0.0);
+  EXPECT_NEAR(filter.gain_db(), ToneFilter::kMaxLevelDb, 0.001);
+}
+```
+
+- Do not overuse mocks. A test full of mock expectations exposes
+  implementation details and is brittle. Mock only true boundaries (for
+  example, `AudioEngineInterface`) where a real implementation would open a
+  device or call a network.
+
+```cpp
+// Bad: mocking the DSP filter couples the test to private call patterns.
+MockToneFilter mock;
+EXPECT_CALL(mock, SetControlPosition(0.5));
+
+// Good: mock only the device boundary; let the real filter run.
+class FakeAudioEngine : public AudioEngineInterface {
+ public:
+  void SetControlPosition(double pos) override { last_pos_ = pos; }
+  double last_pos_ = 0.0;
+};
+```
+
+- Test the contract, meaning observable behavior the component promises, not
+  internal details that could change without breaking a real guarantee.
+
+```cpp
+// Bad: tests a specific internal coefficient value.
+TEST(ToneFilterTest, B0CoefficientValue) {
+  ToneFilter filter(48000.0);
+  filter.SetLevelDb(12.0);
+  EXPECT_NEAR(filter.coefficients().b0, 1.006, 0.001);
+}
+
+// Good: tests the observable contract.
+TEST(ToneFilterTest, BassBoostedAt12dB) {
+  ToneFilter filter(48000.0);
+  filter.SetLevelDb(12.0);
+  const FilterCoefficients& c = filter.coefficients();
+  EXPECT_GT((c.b0 + c.b1 + c.b2) / (1.0 + c.a1 + c.a2), 1.5);
+}
+```
+
+- Prefer testing through the public interface. If the interface is too narrow
+  for sufficient coverage, extract a small testable subcomponent rather than
+  punching through encapsulation.
+- When a test genuinely needs private access, prefer this order:
+  (1) extend the public interface (add a `ForTesting` method if truly
+  test-only), then (2) define a friend test peer class in `_test.cpp` for
+  controlled access. Never use `FRIEND_TEST`, and never befriend an entire
+  fixture.
+
+```cpp
+// Bad: FRIEND_TEST couples the header to specific test names.
+class ToneFilter {
+  FRIEND_TEST(ToneFilterTest, InternalCoefficients);
+};
+
+// Good: test peer in _test.cpp gives controlled, named access.
+class ToneFilterPeer {
+ public:
+  explicit ToneFilterPeer(ToneFilter& f) : f_(f) {}
+  const FilterCoefficients& coefficients() const { return f_.coefficients(); }
+
+ private:
+  ToneFilter& f_;
+};
+```
+
+- Each test has exactly one arrange -> act -> assert. Do not call the function
+  under test more than once in one test. Put each scenario in its own test.
+
+```cpp
+// Bad: two scenarios share one test.
+TEST(ToneFilterTest, SliderExtremes) {
+  constexpr double kSampleRateHz = 48000.0;
+  constexpr double kZeroPosition = 0.0;
+  constexpr double kOnePosition = 1.0;
+  constexpr double kTolerance = 0.001;
+  ToneFilter filter(kSampleRateHz);
+  filter.SetControlPosition(kZeroPosition);
+  EXPECT_NEAR(filter.gain_db(), ToneFilter::kMaxLevelDb, kTolerance);
+  filter.SetControlPosition(kOnePosition);  // second act; should not be here.
+  EXPECT_NEAR(filter.gain_db(), kZeroPosition, kTolerance);
+}
+
+// Good: one scenario per test.
+TEST(ToneFilterTest, ControlAtZeroSetsMaxLevel) {
+  constexpr double kSampleRateHz = 48000.0;
+  constexpr double kZeroPosition = 0.0;
+  constexpr double kTolerance = 0.001;
+  ToneFilter filter(kSampleRateHz);
+  filter.SetControlPosition(kZeroPosition);
+  EXPECT_NEAR(filter.gain_db(), ToneFilter::kMaxLevelDb, kTolerance);
+}
+TEST(ToneFilterTest, ControlAtOneSetsZeroLevel) {
+  constexpr double kSampleRateHz = 48000.0;
+  constexpr double kOnePosition = 1.0;
+  constexpr double kZeroPosition = 0.0;
+  constexpr double kTolerance = 0.001;
+  ToneFilter filter(kSampleRateHz);
+  filter.SetControlPosition(kOnePosition);
+  EXPECT_NEAR(filter.gain_db(), kZeroPosition, kTolerance);
+}
+```
+
+- Duplication in tests is more acceptable than in production code. It is fine
+  to repeat setup boilerplate across tests; do not factor out the core story of
+  a test into a helper that the reader must chase.
+- If testing an API requires large amounts of boilerplate, treat that as an API
+  usability signal, not a reason to add more test infrastructure.
+
+### Working with lint rules and tests
+- After every code change, fix all clang-tidy warnings and clang-format errors
+  in the affected files before considering the task done. Do not leave warnings
+  for a follow-up.
+- If the only way to resolve a clang-tidy warning, clang-format issue, or test
+  failure is to suppress or relax the rule (for example, adding `// NOLINT`,
+  removing a check from `.clang-tidy`, changing `.clang-format`, or deleting a
+  test), stop and ask before proceeding.
+- The same applies when auditing existing suppressions. Before adding a
+  justification comment to a bare `// NOLINT`, ask whether the warning can be
+  eliminated entirely first.
+- When a suppression is warranted, verify the reason applies to each identifier
+  individually; do not extend it by proximity.
+- Never copy or duplicate declarations, types, or variables to work around
+  ordering or dependency issues. That creates two sources of truth that can
+  silently diverge. If lint or build rules need adjustment, ask first.
+
+```cpp
+// Bad: suppression by proximity.
+const double x = ...;   // NOLINT(readability-identifier-length) - cookbook
+const double y = ...;   // NOLINT(readability-identifier-length) - cookbook
+const double dl = ...;  // NOLINT(readability-identifier-length)
+
+// Good: keep justified names; rename unjustified abbreviations.
+const double x = ...;      // NOLINT(readability-identifier-length) - cookbook
+const double y = ...;      // NOLINT(readability-identifier-length) - cookbook
+const double delay = ...;  // no suppression needed
+```
+
+### Keeping everything current
+- Any time you touch a file, scan for stale references: renamed identifiers,
+  outdated comments, stale examples, and mismatches between docs and code.
+- When adding or modifying any code element -- function, struct, class, data
+  member, file header, or inline logic -- ensure its comment exists and
+  follows the comment guidelines. When changing behavior, contracts, members,
+  or purpose, update the corresponding comment to match.
+- Apply this consistently to source files, tests, and `CLAUDE.md`.
+
+```cpp
+// Bad: struct added without explaining what it groups.
+struct StreamClientSetup {
+  CaptureClientSetup capture;
+  RenderClientSetup render;
+};
+
+// Bad: data member added without explaining why it is a member.
+std::atomic<double> gain_db_ = 0.0;
+
+// Bad: function added without a declaration comment.
+[[nodiscard]] bool StartStreams(RunningPipelineState& state,
+                                std::stop_token stoken) {
+  ...
+}
+
+// Bad: behavior changed but comment still describes the old contract.
+// Returns the raw device pointer.
+[[nodiscard]] EndpointAcquisition AcquireEndpoint() {
+  ...
+}
+
+// Good: comment matches the current behavior and return contract.
+// Returns true when both capture and render streams are running; returns
+// false when startup failed and recovery was unsuccessful.
+[[nodiscard]] bool StartStreams(RunningPipelineState& state,
+                                std::stop_token stoken) {
+  ...
+}
+
+// Good: data member explains why atomic is needed.
+// Atomic so gain can be updated from any thread while audio is processing.
+std::atomic<double> gain_db_ = 0.0;
+```
+
+### After updating CLAUDE.md
+- Before adding a new rule, check for conflicts and duplication with existing
+  rules in this file, the Google C++ Style Guide, and any other guides this
+  document references. If the new rule is a special case of an existing one,
+  add it as a clarification or heuristic under that rule rather than as a
+  standalone entry.
+- Every new rule must include at least one example showing the bad pattern and
+  the good pattern.
+- After changing `CLAUDE.md`, audit the codebase for violations of the
+  added or tightened rules and fix them in the same task.
+- For style-enforcement changes, verify `.clang-format`, `.clang-tidy`, and
+  relevant build config still match the documented rules.
+- Build and run tests before considering a `CLAUDE.md`-driven update complete.
