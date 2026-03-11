@@ -133,6 +133,16 @@ else()
 endif()
 target_enable_clang_tidy(bass_boost_filter)
 
+add_library(harmonic_exciter STATIC src/harmonic_exciter.cpp)
+target_include_directories(harmonic_exciter PUBLIC src)
+if(MSVC)
+    target_compile_options(harmonic_exciter PRIVATE
+        $<$<NOT:$<CONFIG:Debug>>:/O2>)
+else()
+    target_compile_options(harmonic_exciter PRIVATE -O2)
+endif()
+target_enable_clang_tidy(harmonic_exciter)
+
 # -----------------------------------------------------------------------
 # Tests
 # -----------------------------------------------------------------------
@@ -145,4 +155,12 @@ if(BUILD_TESTS)
     add_test(NAME bass_boost_filter_test
              COMMAND $<TARGET_FILE:bass_boost_filter_test> --gtest_color=yes)
     target_enable_clang_tidy(bass_boost_filter_test)
+
+    add_executable(harmonic_exciter_test src/harmonic_exciter_test.cpp)
+    target_link_libraries(harmonic_exciter_test PRIVATE
+        harmonic_exciter GTest::gtest_main)
+    target_include_directories(harmonic_exciter_test PRIVATE src)
+    add_test(NAME harmonic_exciter_test
+             COMMAND $<TARGET_FILE:harmonic_exciter_test> --gtest_color=yes)
+    target_enable_clang_tidy(harmonic_exciter_test)
 endif()
