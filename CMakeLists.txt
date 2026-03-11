@@ -172,6 +172,28 @@ if(WIN32)
 endif()
 
 # -----------------------------------------------------------------------
+# Main executable  (Windows only)
+# -----------------------------------------------------------------------
+if(WIN32 AND BUILD_GUI)
+    add_executable(Win32BassBooster WIN32
+        src/main.cpp
+        resources/app.rc
+    )
+    target_include_directories(Win32BassBooster PRIVATE src)
+    target_link_libraries(Win32BassBooster PRIVATE
+        main_window audio_pipeline theme_manager
+        bass_boost_filter
+        uxtheme dwmapi avrt ole32 oleaut32 uuid winmm)
+    if(MSVC)
+        target_compile_options(Win32BassBooster PRIVATE /W4 /WX)
+        set_target_properties(Win32BassBooster PROPERTIES
+            LINK_FLAGS "/SUBSYSTEM:WINDOWS /MANIFEST:NO"
+        )
+    endif()
+    target_enable_clang_tidy(Win32BassBooster)
+endif()
+
+# -----------------------------------------------------------------------
 # Tests
 # -----------------------------------------------------------------------
 if(BUILD_TESTS)
