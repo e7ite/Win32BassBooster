@@ -182,3 +182,215 @@ The DSP test binaries land in `build/bin/`:
 - `harmonic_exciter_test`
 
 The Win32-specific tests (`audio_pipeline_test`, `theme_manager_test`,
+`main_window_test`) are excluded because they depend on Windows APIs unavailable
+on Linux.
+
+## Building with VS Code
+
+### Extensions
+
+Install these two extensions from the VS Code Marketplace:
+
+- [C/C++][vscode-cpptools] (ms-vscode.cpptools) — IntelliSense and debugging.
+- [CMake Tools][vscode-cmake-tools]
+  (ms-vscode.cmake-tools) — configure, build, and test without leaving the
+  editor.
+
+### Open the project
+
+**File → Open Folder** and select the `Win32BassBooster` directory. VS Code
+will detect `CMakeLists.txt` and CMake Tools will offer to configure the
+project automatically.
+
+### Select a kit
+
+CMake Tools needs to know which compiler to use. When prompted, or via
+**Ctrl+Shift+P → CMake: Select a Kit**, choose:
+
+```
+Visual Studio Community 2019 Release - amd64
+```
+
+or the equivalent for your VS version (2022 works too). Pick any VS 2019/2022
+amd64 entry.
+
+### Set the build variant
+
+The build type is shown in the status bar (bottom of the window). Click it and
+select **Release** for an optimised build, or leave it as **Debug** for
+development.
+
+### Build
+
+Click the **Build** button (hammer icon) in the status bar, or:
+
+```
+Ctrl+Shift+P → CMake: Build
+```
+
+The executable is written to `build\bin\Release\Win32BassBooster.exe` (or
+`build\bin\Debug\` for a Debug build).
+
+### Run the tests
+
+Open the **Testing** panel (beaker icon in the Activity Bar) to run and
+inspect individual tests, or run all of them at once:
+
+```
+Ctrl+Shift+P → CMake: Run Tests
+```
+
+### Run / debug the application
+
+Use the status bar **launch target** selector (next to the play button) to
+pick **Win32BassBooster**, then:
+
+- **Ctrl+Shift+P → CMake: Run Without Debugging** — launch the built exe.
+- **Ctrl+Shift+P → CMake: Debug** — launch under the debugger with
+  breakpoints.
+
+## Usage
+
+Run `Win32BassBooster.exe` on Windows. It captures whatever is currently playing
+through your default audio output device.
+
+- Drag the slider **left** to increase bass boost (up to +15 dB at 100 Hz).
+- Drag the slider **right** to return to flat (0 dB).
+- The title bar and colors follow your Windows dark/light theme setting.
+
+## Project layout
+
+```
+.
+├── src/
+│   ├── bass_boost_filter.hpp/.cpp    # Biquad low-shelf IIR filter
+│   ├── harmonic_exciter.hpp/.cpp     # Psychoacoustic bass enhancement
+│   ├── endpoint_audio_format.hpp/.cpp # Endpoint frame decoding to stereo float
+│   ├── audio_pipeline.hpp/.cpp       # WASAPI loopback capture + re-render
+│   ├── theme_manager.hpp/.cpp        # Dark/light palette + DWM title bar
+│   ├── main_window.hpp/.cpp          # Top-level Win32 window
+│   ├── main.cpp                      # Entry point
+│   └── *_test.cpp                    # Unit tests (one per module)
+├── resources/
+│   └── app.rc                        # Manifest, version info
+├── .github/
+│   └── workflows/build.yml           # CI: build + test on every push/PR
+├── .clang-format                     # Code style (Google C++ style)
+├── .clang-tidy                       # Static analysis rules
+├── .githooks/
+│   └── pre-commit                    # Auto-formats staged files on commit
+└── CMakeLists.txt
+```
+
+## Code style
+
+The project uses two LLVM tools to keep code clean:
+
+| Tool | Role |
+|---|---|
+| `clang-format` | Auto-formats sources to Google C++ style (`.clang-format`) |
+| `clang-tidy` | Static analysis at build time (`.clang-tidy`) |
+
+`CLAUDE.md` contains additional local overrides used for this personal project.
+Treat those as repo-specific workflow preferences. For production or team code,
+default to Google C++ style (or the team's standard) unless the team explicitly
+adopts the same overrides.
+
+Both are **required to contribute**. CMake prints a `WARNING` during configure
+if either tool is missing, and CI enforces them on every push/PR.
+
+### Installing LLVM on Windows
+
+1. Go to the [LLVM releases page][llvm-releases]
+   and download the Windows installer — look for a file named
+   `LLVM-<version>-win64.exe`.
+2. Run the installer. On the **"Add LLVM to the system PATH"** screen, select
+   **"Add LLVM to the system PATH for all users"** (or current user).
+3. Open a **new** terminal (the old one won't see the updated PATH) and verify:
+
+   ```bat
+   clang-format --version
+   clang-tidy   --version
+   ```
+
+   Both commands should print a version string. If they print `'clang-format'
+   is not recognized`, the LLVM `bin\` directory is not on `PATH` — add it
+   manually (typically `C:\Program Files\LLVM\bin`):
+
+   ```bat
+   setx PATH "%PATH%;C:\Program Files\LLVM\bin"
+   ```
+
+   Open a new terminal again and re-verify.
+
+4. Re-run CMake configure so it picks up the tools:
+
+   ```bat
+   cmake -B build
+   ```
+
+   You should now see `-- clang-format: ...` and `-- clang-tidy: ...` in the
+   configure output instead of warnings.
+
+### Installing LLVM on Linux / WSL
+
+```bash
+sudo apt install clang-format clang-tidy
+```
+
+### Registering the pre-commit hook
+
+`cmake -B build` registers `.githooks` as the git hooks directory
+automatically. After that, every `git commit` auto-formats staged `.cpp`/`.hpp`
+files with `clang-format` before the commit is recorded. If `clang-format` is
+not on `PATH` the hook prints a warning and proceeds (so you can still commit
+without it installed locally — CI will catch any formatting issues).
+
+### Formatting all sources manually
+
+```bat
+cmake --build build --target format
+```
+
+### Disabling clang-tidy locally
+
+If you need to build without clang-tidy (e.g., for a quick local test), pass:
+
+```bat
+cmake -B build -DENABLE_CLANG_TIDY=OFF
+```
+
+This suppresses the warning and skips analysis. Do not land code built this way
+— the CI job always runs with clang-tidy enabled.
+
+## CI and branch protection
+
+GitHub Actions builds and tests every push and pull request. The badge above
+reflects the current status of `main`.
+
+To prevent merging broken code, enable branch protection in the GitHub
+repository
+settings:
+
+1. **Settings → Branches → Add branch protection rule** for `main`.
+2. Enable **Require status checks to pass before merging** and select the
+   `build`
+   check.
+3. Enable **Require branches to be up to date before merging**.
+4. Enable **Do not allow bypassing the above settings**.
+
+With these rules in place, no PR can be merged and no direct push to `main`
+can succeed unless the CI build and all tests pass.
+
+[build-badge]:
+https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml/badge.svg
+[build-workflow]:
+https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml
+[vs2019-build-tools]: https://aka.ms/vs/16/release/vs_BuildTools.exe
+[vs2022-build-tools]: https://aka.ms/vs/17/release/vs_BuildTools.exe
+[cmake-download]: https://cmake.org/download/
+[vscode-cpptools]:
+https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools
+[vscode-cmake-tools]:
+https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools
+[llvm-releases]: https://github.com/llvm/llvm-project/releases/latest
