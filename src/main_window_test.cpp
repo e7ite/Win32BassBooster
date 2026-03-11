@@ -101,6 +101,7 @@ TEST_F(MainWindowLiveTest, HScrollMessageUpdatesBoostLevel) {
       SendMessageW(slider, TBM_GETRANGEMAX, /*wParam=*/0, /*lParam=*/0));
 
   const int midpoint = (slider_min + slider_max) / 2;
+
   SendMessageW(slider, TBM_SETPOS, TRUE, midpoint);
   SendMessageW(window_->hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, midpoint),
@@ -130,6 +131,7 @@ TEST_F(MainWindowLiveTest, SliderAtMinSetsZeroBoost) {
 
   const int slider_min = static_cast<int>(
       SendMessageW(slider, TBM_GETRANGEMIN, /*wParam=*/0, /*lParam=*/0));
+
   SendMessageW(slider, TBM_SETPOS, TRUE, slider_min);
   SendMessageW(window_->hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, slider_min),
@@ -147,6 +149,7 @@ TEST_F(MainWindowLiveTest, SliderAtMaxSetsMaxBoost) {
 
   const int slider_max = static_cast<int>(
       SendMessageW(slider, TBM_GETRANGEMAX, /*wParam=*/0, /*lParam=*/0));
+
   SendMessageW(slider, TBM_SETPOS, TRUE, slider_max);
   SendMessageW(window_->hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, slider_max),

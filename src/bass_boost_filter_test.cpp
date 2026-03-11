@@ -26,7 +26,9 @@ TEST(BassBoostFilterTest, ZeroGainIsUnity) {
   filter.SetGainDb(0.0);
   float buf[] = {kBufSampleA,  kBufSampleA, -kBufSampleB,
                  -kBufSampleB, kBufSampleC, kBufSampleC};
+
   filter.ProcessStereo(buf);
+
   // Even indices are the L channel; R mirrors L in this buffer so one channel
   // is sufficient to verify unity gain.
   EXPECT_NEAR(buf[0], kBufSampleA, 1e-5F);
@@ -40,8 +42,10 @@ TEST(BassBoostFilterTest, BassBoostedAt100Hz) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(kGain12dB);
   const BiquadCoeffs& coeffs = filter.coefficients();
+
   const double dc_gain =
       (coeffs.b0 + coeffs.b1 + coeffs.b2) / (1.0 + coeffs.a1 + coeffs.a2);
+
   EXPECT_GT(dc_gain, 1.5);
 }
 
@@ -54,7 +58,9 @@ TEST(BassBoostFilterTest, HighFreqUnaffected) {
   filter.SetGainDb(kGain15dB);
   float buf[] = {1.0F, 1.0F, -1.0F, -1.0F, 1.0F, 1.0F, -1.0F, -1.0F,
                  1.0F, 1.0F, -1.0F, -1.0F, 1.0F, 1.0F, -1.0F, -1.0F};
+
   filter.ProcessStereo(buf);
+
   // buf[14] is the L channel of the last frame (frame 7); by that point the
   // startup transient has settled, so gain should be at unity.
   EXPECT_NEAR(std::abs(buf[14]), 1.0F, 0.06F);
@@ -63,6 +69,7 @@ TEST(BassBoostFilterTest, HighFreqUnaffected) {
 TEST(BassBoostFilterTest, GainClampedAtMax) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(100.0);
+
   EXPECT_LE(filter.gain_db(), BassBoostFilter::kMaxGainDb);
 }
 
@@ -70,6 +77,7 @@ TEST(BassBoostFilterTest, GainClampedAtMin) {
   constexpr double kBelowMinGainDb = -5.0;
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(kBelowMinGainDb);
+
   EXPECT_GE(filter.gain_db(), BassBoostFilter::kMinGainDb);
 }
 
@@ -83,6 +91,7 @@ TEST(BassBoostFilterTest, ResetClearsDelayLineState) {
   filter.Reset();
   float zeros[] = {0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
   filter.ProcessStereo(zeros);
+
   // Even indices are the L channel; each channel has its own delay line, so
   // one per channel is enough to verify both were cleared.
   EXPECT_NEAR(zeros[0], 0.0F, 1e-5F);
@@ -93,6 +102,7 @@ TEST(BassBoostFilterTest, ResetClearsDelayLineState) {
 TEST(BassBoostFilterTest, CoefficientsFiniteAtZeroGain) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(0.0);
+
   EXPECT_TRUE(std::isfinite(filter.coefficients().b0));
   EXPECT_TRUE(std::isfinite(filter.coefficients().b1));
   EXPECT_TRUE(std::isfinite(filter.coefficients().b2));
@@ -104,6 +114,7 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtHalfMaxGain) {
   constexpr double kHalfMaxGain = BassBoostFilter::kMaxGainDb / 2.0;
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(kHalfMaxGain);
+
   EXPECT_TRUE(std::isfinite(filter.coefficients().b0));
   EXPECT_TRUE(std::isfinite(filter.coefficients().b1));
   EXPECT_TRUE(std::isfinite(filter.coefficients().b2));
@@ -114,6 +125,7 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtHalfMaxGain) {
 TEST(BassBoostFilterTest, CoefficientsFiniteAtMaxGain) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(BassBoostFilter::kMaxGainDb);
+
   EXPECT_TRUE(std::isfinite(filter.coefficients().b0));
   EXPECT_TRUE(std::isfinite(filter.coefficients().b1));
   EXPECT_TRUE(std::isfinite(filter.coefficients().b2));
@@ -128,6 +140,7 @@ TEST(BassBoostFilterTest, MonoChannel0MatchesStereoChannel0) {
   constexpr float kStereoR2 = 0.4F;
   BassBoostFilter filter1(kSampleRate);
   BassBoostFilter filter2(kSampleRate);
+
   filter1.SetGainDb(kGain10dB);
   filter2.SetGainDb(kGain10dB);
 
@@ -147,7 +160,9 @@ TEST(BassBoostFilterTest, MonoChannel0MatchesStereoChannel0) {
 TEST(BassBoostFilterTest, FrequencyAccessorReturnsSetValue) {
   constexpr double kTestFrequency = 200.0;
   BassBoostFilter filter(kSampleRate);
+
   filter.SetFrequency(kTestFrequency);
+
   EXPECT_NEAR(filter.frequency(), kTestFrequency, 0.001);
 }
 
@@ -155,26 +170,34 @@ TEST(BassBoostFilterTest, FrequencyClampedAboveNyquistGuard) {
   constexpr double kAboveNyquist = 100'000.0;
   constexpr double kNyquistGuardRatio = 0.4;
   BassBoostFilter filter(kSampleRate);
+
   filter.SetFrequency(kAboveNyquist);
+
   // 0.4 * 48000 = 19200 Hz is the upper limit.
   EXPECT_LE(filter.frequency(), kSampleRate * kNyquistGuardRatio);
 }
 
 TEST(BassBoostFilterTest, FrequencyClampedBelowMinimum) {
   BassBoostFilter filter(kSampleRate);
+
   filter.SetFrequency(1.0);
+
   EXPECT_GE(filter.frequency(), 20.0);
 }
 
 TEST(BassBoostFilterTest, GainAtExactMinBoundary) {
   BassBoostFilter filter(kSampleRate);
+
   filter.SetGainDb(BassBoostFilter::kMinGainDb);
+
   EXPECT_NEAR(filter.gain_db(), BassBoostFilter::kMinGainDb, 1e-9);
 }
 
 TEST(BassBoostFilterTest, GainAtExactMaxBoundary) {
   BassBoostFilter filter(kSampleRate);
+
   filter.SetGainDb(BassBoostFilter::kMaxGainDb);
+
   EXPECT_NEAR(filter.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
 }
 
@@ -189,6 +212,7 @@ TEST(BassBoostFilterTest, MonoChannel1MatchesStereoChannel1) {
   constexpr float kRightC = 0.9F;
   BassBoostFilter stereo_filter(kSampleRate);
   BassBoostFilter mono_filter(kSampleRate);
+
   stereo_filter.SetGainDb(kGain10dB);
   mono_filter.SetGainDb(kGain10dB);
 
@@ -208,10 +232,13 @@ TEST(BassBoostFilterTest, ProcessStereoEmptyBufferIsNoOp) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(kGain12dB);
   std::span<float> empty;
+
   filter.ProcessStereo(empty);
+
   // No crash, no state corruption; verify with a known signal after.
   float buf[] = {0.0F, 0.0F};
   filter.ProcessStereo(buf);
+
   EXPECT_NEAR(buf[0], 0.0F, 1e-5F);
 }
 
@@ -219,9 +246,12 @@ TEST(BassBoostFilterTest, ProcessMonoEmptyBufferIsNoOp) {
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(kGain12dB);
   std::span<float> empty;
+
   filter.ProcessMono(empty, BassBoostFilter::Channel::Left);
+
   float buf[] = {0.0F};
   filter.ProcessMono(buf, BassBoostFilter::Channel::Left);
+
   EXPECT_NEAR(buf[0], 0.0F, 1e-5F);
 }
 
@@ -231,7 +261,9 @@ TEST(BassBoostFilterTest, SetSampleRateUpdatesCoefficients) {
   const BiquadCoeffs before = filter.coefficients();
 
   constexpr double kNewSampleRate = 96000.0;
+
   filter.SetSampleRate(kNewSampleRate);
+
   const BiquadCoeffs& after = filter.coefficients();
   // Coefficients depend on sample rate; at least one must change.
   const bool coeffs_changed = std::abs(before.b0 - after.b0) > 1e-9 ||
@@ -244,6 +276,7 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtLowSampleRate) {
   constexpr double kLowSampleRate = 8000.0;
   BassBoostFilter filter(kLowSampleRate);
   filter.SetGainDb(BassBoostFilter::kMaxGainDb);
+
   EXPECT_TRUE(std::isfinite(filter.coefficients().b0));
   EXPECT_TRUE(std::isfinite(filter.coefficients().a1));
 }
@@ -252,6 +285,7 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtHighSampleRate) {
   constexpr double kHighSampleRate = 192000.0;
   BassBoostFilter filter(kHighSampleRate);
   filter.SetGainDb(BassBoostFilter::kMaxGainDb);
+
   EXPECT_TRUE(std::isfinite(filter.coefficients().b0));
   EXPECT_TRUE(std::isfinite(filter.coefficients().a1));
 }
@@ -267,6 +301,7 @@ TEST(BassBoostFilterTest, DcGainIncreasesWithGainDb) {
   const auto dc_gain = [](const BiquadCoeffs& coeffs) {
     return (coeffs.b0 + coeffs.b1 + coeffs.b2) / (1.0 + coeffs.a1 + coeffs.a2);
   };
+
   EXPECT_GT(dc_gain(high_filter.coefficients()),
             dc_gain(low_filter.coefficients()));
 }
@@ -278,8 +313,11 @@ TEST(BassBoostFilterTest, FrequencyChangeUpdatesCoefficients) {
   const BiquadCoeffs at_100 = filter.coefficients();
 
   constexpr double kNewFrequency = 200.0;
+
   filter.SetFrequency(kNewFrequency);
+
   const BiquadCoeffs& at_200 = filter.coefficients();
+
   EXPECT_NE(at_100.b0, at_200.b0);
 }
 

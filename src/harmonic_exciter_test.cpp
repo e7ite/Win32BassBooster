@@ -19,7 +19,9 @@ TEST(HarmonicExciterTest, BypassAtZeroAmount) {
   constexpr float kSampleB = 0.3F;
   constexpr float kSampleC = 0.8F;
   float buf[] = {kSampleA, kSampleA, -kSampleB, -kSampleB, kSampleC, kSampleC};
+
   exciter.ProcessStereo(buf);
+
   // Even indices are the L channel; R mirrors L in this buffer so one channel
   // is sufficient to verify bypass.
   EXPECT_FLOAT_EQ(buf[0], kSampleA);
@@ -33,7 +35,9 @@ TEST(HarmonicExciterTest, AddsEnergyAtMaxAmount) {
   // DC input causes the LPF to produce a small but non-zero output on the first
   // sample; the rectifier and HPF pass it; the output exceeds 1.0.
   float buf[] = {1.0F, 1.0F};
+
   exciter.ProcessStereo(buf);
+
   EXPECT_GT(buf[0], 1.0F);
 }
 
@@ -44,7 +48,9 @@ TEST(HarmonicExciterTest, HighFreqUnaffected) {
   // the exciter contributes nothing and the output stays at +/-1.
   float buf[] = {1.0F, 1.0F, -1.0F, -1.0F, 1.0F, 1.0F, -1.0F, -1.0F,
                  1.0F, 1.0F, -1.0F, -1.0F, 1.0F, 1.0F, -1.0F, -1.0F};
+
   exciter.ProcessStereo(buf);
+
   // buf[12] and buf[14] are L-channel samples of frames 6 and 7; checking two
   // consecutive settled frames confirms the LPF transient is fully gone.
   EXPECT_NEAR(std::abs(buf[12]), 1.0F, 0.01F);
@@ -69,26 +75,33 @@ TEST(HarmonicExciterTest, ResetClearsState) {
 
 TEST(HarmonicExciterTest, AmountClampedBelowZero) {
   HarmonicExciter exciter(kSampleRate);
+
   exciter.SetAmount(-1.0);
+
   EXPECT_DOUBLE_EQ(exciter.amount(), 0.0);
 }
 
 TEST(HarmonicExciterTest, AmountClampedAboveOne) {
   HarmonicExciter exciter(kSampleRate);
   constexpr double kAboveMaxAmount = 2.0;
+
   exciter.SetAmount(kAboveMaxAmount);
+
   EXPECT_DOUBLE_EQ(exciter.amount(), 1.0);
 }
 
 TEST(HarmonicExciterTest, AmountInRangeUnchanged) {
   HarmonicExciter exciter(kSampleRate);
   constexpr double kMidAmount = 0.5;
+
   exciter.SetAmount(kMidAmount);
+
   EXPECT_DOUBLE_EQ(exciter.amount(), kMidAmount);
 }
 
 TEST(HarmonicExciterTest, DefaultAmountIsZero) {
   HarmonicExciter exciter(kSampleRate);
+
   EXPECT_DOUBLE_EQ(exciter.amount(), 0.0);
 }
 
@@ -102,6 +115,7 @@ TEST(HarmonicExciterTest, IntermediateBlendScalesEffect) {
 
   float quarter_buf[] = {1.0F, 1.0F};
   float full_buf[] = {1.0F, 1.0F};
+
   quarter_exciter.ProcessStereo(quarter_buf);
   full_exciter.ProcessStereo(full_buf);
 
@@ -114,10 +128,13 @@ TEST(HarmonicExciterTest, ProcessStereoEmptyBufferIsNoOp) {
   HarmonicExciter exciter(kSampleRate);
   exciter.SetAmount(1.0);
   std::span<float> empty;
+
   exciter.ProcessStereo(empty);
+
   // No crash; verify state is still usable.
   float buf[] = {0.0F, 0.0F};
   exciter.ProcessStereo(buf);
+
   EXPECT_NEAR(buf[0], 0.0F, 1e-6F);
 }
 
@@ -127,7 +144,9 @@ TEST(HarmonicExciterTest, ChannelsAreIndependent) {
   exciter.SetAmount(1.0);
   // Left = DC signal, right = zero; only left should be affected.
   float buf[] = {1.0F, 0.0F};
+
   exciter.ProcessStereo(buf);
+
   EXPECT_GT(buf[0], 1.0F);
   EXPECT_NEAR(buf[1], 0.0F, 1e-6F);
 }
@@ -136,10 +155,13 @@ TEST(HarmonicExciterTest, SetSampleRateDoesNotCrash) {
   HarmonicExciter exciter(kSampleRate);
   exciter.SetAmount(1.0);
   constexpr double kNewSampleRate = 96000.0;
+
   exciter.SetSampleRate(kNewSampleRate);
+
   // Process a buffer to verify the new coefficients work.
   float buf[] = {1.0F, 1.0F};
   exciter.ProcessStereo(buf);
+
   EXPECT_TRUE(std::isfinite(buf[0]));
 }
 
@@ -149,7 +171,9 @@ TEST(HarmonicExciterTest, AmountAtExactZeroIsBypass) {
   exciter.SetAmount(0.0);
   constexpr float kInput = 0.42F;
   float buf[] = {kInput, kInput};
+
   exciter.ProcessStereo(buf);
+
   EXPECT_FLOAT_EQ(buf[0], kInput);
   EXPECT_FLOAT_EQ(buf[1], kInput);
 }

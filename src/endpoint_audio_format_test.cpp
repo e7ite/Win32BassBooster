@@ -49,6 +49,7 @@ TEST(EndpointAudioFormatTest, AcceptsPackedFloat32Stereo) {
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
                                           .channels = kStereoChannelCount,
                                           .bits_per_sample = kBitsPerSample32});
+
   EXPECT_TRUE(SupportsDirectStereoFloatCopy(format));
 }
 
@@ -56,6 +57,7 @@ TEST(EndpointAudioFormatTest, RejectsFloat32Mono) {
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
                                           .channels = kMonoChannelCount,
                                           .bits_per_sample = kBitsPerSample32});
+
   EXPECT_FALSE(SupportsDirectStereoFloatCopy(format));
 }
 
@@ -63,6 +65,7 @@ TEST(EndpointAudioFormatTest, RejectsPcm16Stereo) {
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_PCM,
                                           .channels = kStereoChannelCount,
                                           .bits_per_sample = kBitsPerSample16});
+
   EXPECT_FALSE(SupportsDirectStereoFloatCopy(format));
 }
 
@@ -73,6 +76,7 @@ TEST(EndpointAudioFormatTest, AcceptsExtensibleFloat32Stereo) {
                               .bits_per_sample = kBitsPerSample32});
   format.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
   format.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+
   EXPECT_TRUE(SupportsDirectStereoFloatCopy(format.Format));
 }
 
@@ -83,8 +87,10 @@ TEST(EndpointAudioFormatTest, DecodeMono16DuplicatesChannel) {
                                           .bits_per_sample = kBitsPerSample16});
   const std::array<uint8_t, kMono16TwoFrameByteCount> src = {0x00, 0x40, 0x00,
                                                              0xC0};
+
   const StereoPcmBuffer decoded =
       DecodeToStereoFloat(src.data(), kTwoFrames, format);
+
   ASSERT_EQ(decoded.frames, kTwoFrames);
   ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
   EXPECT_NEAR(decoded.samples[0], kHalfScale, kDecodeTolerance);
@@ -106,8 +112,10 @@ TEST(EndpointAudioFormatTest, DecodeStereo16PreservesLeftRightLanes) {
       0x00, 0x20,  // frame 1 left: +0.25
       0x00, 0xE0,  // frame 1 right: -0.25
   };
+
   const StereoPcmBuffer decoded =
       DecodeToStereoFloat(src.data(), kTwoFrames, format);
+
   ASSERT_EQ(decoded.frames, kTwoFrames);
   ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
   EXPECT_NEAR(decoded.samples[0], kHalfScale, kDecodeTolerance);
@@ -126,8 +134,10 @@ TEST(EndpointAudioFormatTest, DecodeMono24PreservesSamplePolarity) {
       0xFF, 0xFF, 0x7F,  // frame 0: max positive 24-bit
       0x00, 0x00, 0x80,  // frame 1: max negative 24-bit
   };
+
   const StereoPcmBuffer decoded =
       DecodeToStereoFloat(src.data(), kTwoFrames, format);
+
   ASSERT_EQ(decoded.frames, kTwoFrames);
   ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
   EXPECT_GT(decoded.samples[0], kStrongPolarityThreshold);
@@ -144,8 +154,10 @@ TEST(EndpointAudioFormatTest, DecodeStereoFloat32ReturnsIdentity) {
   constexpr float kRight = -0.25F;
   // Two stereo frames of float32: [L0, R0, L1, R1].
   const float src[] = {kLeft, kRight, kRight, kLeft};
+
   const StereoPcmBuffer decoded = DecodeToStereoFloat(
       reinterpret_cast<const BYTE*>(src), kTwoFrames, format);
+
   ASSERT_EQ(decoded.frames, kTwoFrames);
   ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
   EXPECT_NEAR(decoded.samples[0], kLeft, kDecodeTolerance);
@@ -163,8 +175,10 @@ TEST(EndpointAudioFormatTest, DecodeStereoInt32PreservesPolarity) {
   constexpr int32_t kMaxNeg = static_cast<int32_t>(0x80000000);
   const int32_t src[] = {kMaxPos, kMaxNeg, kMaxNeg, kMaxPos};
   constexpr float kStrongThreshold = 0.99F;
+
   const StereoPcmBuffer decoded = DecodeToStereoFloat(
       reinterpret_cast<const BYTE*>(src), kTwoFrames, format);
+
   ASSERT_EQ(decoded.frames, kTwoFrames);
   EXPECT_GT(decoded.samples[0], kStrongThreshold);
   EXPECT_LT(decoded.samples[1], -kStrongThreshold);
@@ -177,8 +191,10 @@ TEST(EndpointAudioFormatTest, DecodeZeroFramesReturnsEmptyBuffer) {
                                           .channels = kStereoChannelCount,
                                           .bits_per_sample = kBitsPerSample32});
   const float src[] = {1.0F, 1.0F};
+
   const StereoPcmBuffer decoded = DecodeToStereoFloat(
       reinterpret_cast<const BYTE*>(src), /*frames=*/0, format);
+
   EXPECT_EQ(decoded.frames, 0U);
   EXPECT_TRUE(decoded.samples.empty());
 }
@@ -189,6 +205,7 @@ TEST(EndpointAudioFormatTest, DecodeNullSrcReturnsEmptyBuffer) {
                                           .bits_per_sample = kBitsPerSample32});
   const StereoPcmBuffer decoded =
       DecodeToStereoFloat(/*src=*/nullptr, kTwoFrames, format);
+
   EXPECT_EQ(decoded.frames, 0U);
   EXPECT_TRUE(decoded.samples.empty());
 }
@@ -202,7 +219,9 @@ TEST(EndpointAudioFormatTest, DecodeUnknownFormatReturnsZeroFilledBuffer) {
   format.nBlockAlign = 3;
   format.nSamplesPerSec = kDefaultSampleRateHz;
   const uint8_t src[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
   const StereoPcmBuffer decoded = DecodeToStereoFloat(src, kTwoFrames, format);
+
   // Unknown format: buffer is allocated but samples are zero.
   EXPECT_EQ(decoded.frames, kTwoFrames);
   EXPECT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
@@ -216,6 +235,7 @@ TEST(EndpointAudioFormatTest, RejectsExtensiblePcm16StereoAsDirectCopy) {
                               .bits_per_sample = kBitsPerSample16});
   format.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
   format.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+
   EXPECT_FALSE(SupportsDirectStereoFloatCopy(format.Format));
 }
 
@@ -231,8 +251,10 @@ TEST(EndpointAudioFormatTest, DecodesExtensiblePcm16Stereo) {
       0x00, 0x40, 0x00, 0xC0,  // frame 0: L=+0.5, R=-0.5
       0x00, 0xC0, 0x00, 0x40,  // frame 1: L=-0.5, R=+0.5
   };
+
   const StereoPcmBuffer decoded =
       DecodeToStereoFloat(src.data(), kTwoFrames, format.Format);
+
   ASSERT_EQ(decoded.frames, kTwoFrames);
   EXPECT_NEAR(decoded.samples[0], kHalfScale, kDecodeTolerance);
   EXPECT_NEAR(decoded.samples[1], kNegativeHalfScale, kDecodeTolerance);
@@ -248,8 +270,10 @@ TEST(EndpointAudioFormatTest, DecodeSingleFrameWorks) {
   constexpr float kRight = -0.77F;
   const float src[] = {kLeft, kRight};
   constexpr uint32_t kOneFrame = 1;
+
   const StereoPcmBuffer decoded = DecodeToStereoFloat(
       reinterpret_cast<const BYTE*>(src), kOneFrame, format);
+
   ASSERT_EQ(decoded.frames, kOneFrame);
   constexpr size_t kStereoSamplesForOneFrame = 2;
   ASSERT_EQ(decoded.samples.size(), kStereoSamplesForOneFrame);
@@ -263,6 +287,7 @@ TEST(EndpointAudioFormatTest, RejectsFloat32WithWrongBlockAlign) {
                                     .bits_per_sample = kBitsPerSample32});
   constexpr WORD kWrongBlockAlign = 12;
   format.nBlockAlign = kWrongBlockAlign;
+
   EXPECT_FALSE(SupportsDirectStereoFloatCopy(format));
 }
 

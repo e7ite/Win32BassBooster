@@ -15,11 +15,13 @@ TEST(LoopbackCaptureActivationTest, SucceedsWithComInitialized) {
   ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
 
   IAudioClient* client = nullptr;
+
   const AudioPipelineInterface::Status status =
       ActivateLoopbackCaptureClient(client);
 
   EXPECT_TRUE(status.ok());
   EXPECT_NE(client, nullptr);
+
   if (client != nullptr) {
     client->Release();
   }
@@ -33,6 +35,7 @@ TEST(LoopbackCaptureActivationTest, ReturnsNonEmptyErrorMessageOnFailure) {
   CoUninitialize();
 
   IAudioClient* client = nullptr;
+
   const AudioPipelineInterface::Status status =
       ActivateLoopbackCaptureClient(client);
 
@@ -51,6 +54,7 @@ TEST(LoopbackCaptureActivationTest, ClientIsNullOnFailure) {
   CoUninitialize();
 
   IAudioClient* client = nullptr;
+
   const AudioPipelineInterface::Status status =
       ActivateLoopbackCaptureClient(client);
 
@@ -67,6 +71,7 @@ TEST(LoopbackCaptureActivationTest, StatusCodeIsFailureHresultOnError) {
   CoUninitialize();
 
   IAudioClient* client = nullptr;
+
   const AudioPipelineInterface::Status status =
       ActivateLoopbackCaptureClient(client);
 
@@ -85,6 +90,7 @@ TEST(LoopbackCaptureActivationTest, SuccessStatusCodeIsSok) {
   ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
 
   IAudioClient* client = nullptr;
+
   const AudioPipelineInterface::Status status =
       ActivateLoopbackCaptureClient(client);
 
