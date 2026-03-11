@@ -82,13 +82,13 @@ class AudioPipeline final : public AudioPipelineInterface {
   // Holds the speakers/headphones endpoint that loopback capture mirrors.
   ComPtr<IMMDevice> render_device_;
   // Owns the WASAPI loopback stream configuration and lifetime.
-  ComPtr<IAudioClient> capture_audio_client_;
+  ComPtr<IAudioClient> capture_client_;
   // Owns the WASAPI render stream used to accept processed float output.
-  ComPtr<IAudioClient> render_audio_client_;
+  ComPtr<IAudioClient> render_client_;
   // Pulls captured endpoint packets from the loopback audio client.
-  ComPtr<IAudioCaptureClient> audio_capture_client_;
+  ComPtr<IAudioCaptureClient> capture_service_;
   // Exposes the render buffer that receives processed stereo float frames.
-  ComPtr<IAudioRenderClient> audio_render_client_;
+  ComPtr<IAudioRenderClient> render_service_;
 
   // Owns the render mix format with the required `CoTaskMemFree` cleanup.
   // Process loopback captures in the render format, so this serves both paths.

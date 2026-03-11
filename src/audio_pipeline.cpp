@@ -383,7 +383,7 @@ struct EndpointAcquisition {
 
 struct CaptureClientSetup {
   ScopedComPtr<IAudioClient> audio_client;
-  ScopedComPtr<IAudioCaptureClient> audio_capture_client;
+  ScopedComPtr<IAudioCaptureClient> service;
 };
 
 // Activates a loopback capture client using the process loopback API and
@@ -408,14 +408,14 @@ struct CaptureClientSetup {
       !capture_stream.ok()) {
     return capture_stream;
   }
-  setup.audio_capture_client.reset(raw_client);
+  setup.service.reset(raw_client);
   return AudioPipelineInterface::Status::Ok();
 }
 
 struct RenderClientSetup {
   ScopedComPtr<IAudioClient> audio_client;
-  ScopedComPtr<IAudioRenderClient> audio_render_client;
-  ScopedWaveFormat render_format;
+  ScopedComPtr<IAudioRenderClient> service;
+  ScopedWaveFormat format;
 };
 
 // Activates a shared-mode render client on `render_device`, validates the mix
@@ -443,15 +443,15 @@ struct RenderClientSetup {
     return AudioPipelineInterface::Status::Error(
         render_mix_format, L"GetMixFormat (render) failed");
   }
-  setup.render_format.reset(raw_render_format);
+  setup.format.reset(raw_render_format);
   if (const AudioPipelineInterface::Status format_check =
-          ValidateRenderMixFormat(*setup.render_format);
+          ValidateRenderMixFormat(*setup.format);
       !format_check.ok()) {
     return format_check;
   }
 
-  if (const AudioPipelineInterface::Status render_init = InitializeRenderClient(
-          *setup.audio_client, setup.render_format.get());
+  if (const AudioPipelineInterface::Status render_init =
+          InitializeRenderClient(*setup.audio_client, setup.format.get());
       !render_init.ok()) {
     return render_init;
   }
@@ -463,7 +463,7 @@ struct RenderClientSetup {
       !render_service.ok()) {
     return render_service;
   }
-  setup.audio_render_client.reset(raw_audio_render_client);
+  setup.service.reset(raw_audio_render_client);
   return AudioPipelineInterface::Status::Ok();
 }
 
@@ -482,8 +482,8 @@ struct StreamClientSetup {
       !render.ok()) {
     return render;
   }
-  if (const AudioPipelineInterface::Status capture = SetupCaptureClient(
-          clients.render.render_format.get(), clients.capture);
+  if (const AudioPipelineInterface::Status capture =
+          SetupCaptureClient(clients.render.format.get(), clients.capture);
       !capture.ok()) {
     return capture;
   }
@@ -491,9 +491,9 @@ struct StreamClientSetup {
 }
 
 struct ActiveStreamState {
-  IAudioClient* audio_client;
-  IAudioCaptureClient* audio_capture_client;
-  IAudioRenderClient* audio_render_client;
+  IAudioClient* render_client;
+  IAudioCaptureClient* capture_service;
+  IAudioRenderClient* render_service;
   WAVEFORMATEX* format;
   HarmonicExciter& exciter;
   BassBoostFilter& filter;
@@ -504,14 +504,14 @@ struct ActiveStreamState {
 // requested; otherwise returns the first failing HRESULT.
 [[nodiscard]] HRESULT DrainCaptureQueue(ActiveStreamState& stream,
                                         std::stop_token stoken) {
-  if (stream.audio_capture_client == nullptr || stream.format == nullptr ||
-      stream.audio_client == nullptr || stream.audio_render_client == nullptr) {
+  if (stream.capture_service == nullptr || stream.format == nullptr ||
+      stream.render_client == nullptr || stream.render_service == nullptr) {
     return E_POINTER;
   }
 
   UINT32 packet_size = 0;
   if (const HRESULT packet_size_query =
-          stream.audio_capture_client->GetNextPacketSize(&packet_size);
+          stream.capture_service->GetNextPacketSize(&packet_size);
       FAILED(packet_size_query)) {
     return packet_size_query;
   }
@@ -520,7 +520,7 @@ struct ActiveStreamState {
     BYTE* capture_bytes = nullptr;
     UINT32 frames = 0;
     DWORD flags = 0;
-    if (const HRESULT status = stream.audio_capture_client->GetBuffer(
+    if (const HRESULT status = stream.capture_service->GetBuffer(
             &capture_bytes, &frames, &flags,
             /*device_position=*/nullptr, /*qpc_position=*/nullptr);
         FAILED(status)) {
@@ -531,14 +531,14 @@ struct ActiveStreamState {
         .bytes = capture_bytes, .frames = frames, .flags = flags};
     if (const HRESULT process_packet = ProcessCapturedPacket(
             packet, *stream.format, stream.exciter, stream.filter,
-            *stream.audio_client, *stream.audio_render_client);
+            *stream.render_client, *stream.render_service);
         FAILED(process_packet)) {
-      stream.audio_capture_client->ReleaseBuffer(frames);
+      stream.capture_service->ReleaseBuffer(frames);
       return process_packet;
     }
 
     if (const HRESULT release_and_query = ReleaseAndQueryNextPacket(
-            *stream.audio_capture_client, frames, packet_size);
+            *stream.capture_service, frames, packet_size);
         FAILED(release_and_query)) {
       return release_and_query;
     }
@@ -549,10 +549,10 @@ struct ActiveStreamState {
 struct RunningPipelineState {
   ScopedComPtr<IMMDeviceEnumerator>& enumerator;
   ScopedComPtr<IMMDevice>& render_device;
-  ScopedComPtr<IAudioClient>& capture_audio_client;
-  ScopedComPtr<IAudioClient>& render_audio_client;
-  ScopedComPtr<IAudioCaptureClient>& audio_capture_client;
-  ScopedComPtr<IAudioRenderClient>& audio_render_client;
+  ScopedComPtr<IAudioClient>& capture_client;
+  ScopedComPtr<IAudioClient>& render_client;
+  ScopedComPtr<IAudioCaptureClient>& capture_service;
+  ScopedComPtr<IAudioRenderClient>& render_service;
   ScopedWaveFormat& render_format;
   BassBoostFilter& filter;
   HarmonicExciter& exciter;
@@ -570,13 +570,12 @@ struct RunningPipelineState {
     return false;
   }
 
-  if (state.capture_audio_client == nullptr ||
-      state.render_audio_client == nullptr) {
+  if (state.capture_client == nullptr || state.render_client == nullptr) {
     return false;
   }
 
-  state.capture_audio_client->Stop();
-  state.render_audio_client->Stop();
+  state.capture_client->Stop();
+  state.render_client->Stop();
 
   EndpointAcquisition endpoint = AcquireEndpoint();
   if (!endpoint.status.ok()) {
@@ -589,31 +588,31 @@ struct RunningPipelineState {
   }
 
   const double sample_rate =
-      static_cast<double>(clients.render.render_format->nSamplesPerSec);
+      static_cast<double>(clients.render.format->nSamplesPerSec);
   state.filter.SetSampleRate(sample_rate);
   state.exciter.SetSampleRate(sample_rate);
 
   state.enumerator = std::move(endpoint.enumerator);
   state.render_device = std::move(endpoint.render_device);
   state.endpoint_name = std::move(endpoint.endpoint_name);
-  state.capture_audio_client = std::move(clients.capture.audio_client);
-  state.audio_capture_client = std::move(clients.capture.audio_capture_client);
-  state.render_audio_client = std::move(clients.render.audio_client);
-  state.audio_render_client = std::move(clients.render.audio_render_client);
-  state.render_format = std::move(clients.render.render_format);
+  state.capture_client = std::move(clients.capture.audio_client);
+  state.capture_service = std::move(clients.capture.service);
+  state.render_client = std::move(clients.render.audio_client);
+  state.render_service = std::move(clients.render.service);
+  state.render_format = std::move(clients.render.format);
 
-  if (FAILED(state.capture_audio_client->Start())) {
+  if (FAILED(state.capture_client->Start())) {
     return false;
   }
 
-  return SUCCEEDED(state.render_audio_client->Start());
+  return SUCCEEDED(state.render_client->Start());
 }
 
 // Returns true when both capture and render streams are running; returns false
 // when startup failed and recovery was unsuccessful.
 [[nodiscard]] bool StartStreams(RunningPipelineState& state,
                                 std::stop_token stoken) {
-  const HRESULT capture_start = state.capture_audio_client->Start();
+  const HRESULT capture_start = state.capture_client->Start();
   if (FAILED(capture_start) &&
       !RecoverStreamFailure(state, capture_start, stoken)) {
     return false;
@@ -622,7 +621,7 @@ struct RunningPipelineState {
   // S_OK when capture recovery already restarted both clients; calling
   // `Start()` a second time would fail because the stream is already running.
   const HRESULT render_start =
-      FAILED(capture_start) ? S_OK : state.render_audio_client->Start();
+      FAILED(capture_start) ? S_OK : state.render_client->Start();
   return SUCCEEDED(render_start) ||
          RecoverStreamFailure(state, render_start, stoken);
 }
@@ -635,24 +634,23 @@ void RunAudioThreadLoop(RunningPipelineState& state, std::stop_token stoken) {
   HANDLE task =
       AvSetMmThreadCharacteristicsW(/*taskName=*/L"Pro Audio", &task_index);
 
-  if (state.capture_audio_client == nullptr ||
-      state.render_audio_client == nullptr) {
+  if (state.capture_client == nullptr || state.render_client == nullptr) {
     FinalizeThread(state.running, task);
     return;
   }
 
   if (!StartStreams(state, stoken)) {
-    StopClientsAndFinalizeIfReady(state.capture_audio_client.get(),
-                                  state.render_audio_client.get(),
-                                  state.running, task);
+    StopClientsAndFinalizeIfReady(state.capture_client.get(),
+                                  state.render_client.get(), state.running,
+                                  task);
     return;
   }
 
   while (!stoken.stop_requested()) {
     ActiveStreamState stream_state{
-        .audio_client = state.render_audio_client.get(),
-        .audio_capture_client = state.audio_capture_client.get(),
-        .audio_render_client = state.audio_render_client.get(),
+        .render_client = state.render_client.get(),
+        .capture_service = state.capture_service.get(),
+        .render_service = state.render_service.get(),
         .format = state.render_format.get(),
         .exciter = state.exciter,
         .filter = state.filter};
@@ -669,9 +667,8 @@ void RunAudioThreadLoop(RunningPipelineState& state, std::stop_token stoken) {
     Sleep(kPollIntervalMs);
   }
 
-  StopClientsAndFinalizeIfReady(state.capture_audio_client.get(),
-                                state.render_audio_client.get(), state.running,
-                                task);
+  StopClientsAndFinalizeIfReady(state.capture_client.get(),
+                                state.render_client.get(), state.running, task);
 }
 
 }  // namespace
@@ -706,7 +703,7 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
   }
 
   const double sample_rate =
-      static_cast<double>(clients.render.render_format->nSamplesPerSec);
+      static_cast<double>(clients.render.format->nSamplesPerSec);
   filter_.SetSampleRate(sample_rate);
   exciter_.SetSampleRate(sample_rate);
 
@@ -715,21 +712,21 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
     render_device_ = std::move(endpoint.render_device);
     endpoint_name_ = std::move(endpoint.endpoint_name);
   }
-  capture_audio_client_ = std::move(clients.capture.audio_client);
-  audio_capture_client_ = std::move(clients.capture.audio_capture_client);
-  render_audio_client_ = std::move(clients.render.audio_client);
-  audio_render_client_ = std::move(clients.render.audio_render_client);
-  render_format_ = std::move(clients.render.render_format);
+  capture_client_ = std::move(clients.capture.audio_client);
+  capture_service_ = std::move(clients.capture.service);
+  render_client_ = std::move(clients.render.audio_client);
+  render_service_ = std::move(clients.render.service);
+  render_format_ = std::move(clients.render.format);
 
   running_.store(true);
 
   audio_thread_ = std::jthread([this](std::stop_token stoken) {
     RunningPipelineState state{.enumerator = enumerator_,
                                .render_device = render_device_,
-                               .capture_audio_client = capture_audio_client_,
-                               .render_audio_client = render_audio_client_,
-                               .audio_capture_client = audio_capture_client_,
-                               .audio_render_client = audio_render_client_,
+                               .capture_client = capture_client_,
+                               .render_client = render_client_,
+                               .capture_service = capture_service_,
+                               .render_service = render_service_,
                                .render_format = render_format_,
                                .filter = filter_,
                                .exciter = exciter_,
@@ -745,7 +742,7 @@ void AudioPipeline::Stop() {
   if (audio_thread_.joinable()) {
     audio_thread_.join();
   }
-  StopClientsAndFinalizeIfReady(capture_audio_client_.get(),
-                                render_audio_client_.get(), running_,
+  StopClientsAndFinalizeIfReady(capture_client_.get(), render_client_.get(),
+                                running_,
                                 /*task=*/nullptr);
 }
