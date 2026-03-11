@@ -2,103 +2,15 @@
 
 [![Build][build-badge]][build-workflow]
 
-A system-wide bass boost application for Windows. Intercepts all system audio
-via WASAPI loopback, runs it through a DSP chain (low-shelf biquad filter +
-harmonic exciter + tanh soft limiter), and re-renders the processed audio
-through a second shared-mode client.
+A simple, system-wide bass boost application for Windows.
 
-## How it works
+## How to use
 
-### WASAPI loopback capture
+Simply run `Win32BassBooster.exe`, then drag the slider to control how much bass
+you want. I tried finding something this simple out there, and couldn't. The
+title bar and colors follow your Windows dark/light theme setting.
 
-Windows Audio Session API (WASAPI) lets you open the default render endpoint in
-**loopback mode** (`AUDCLNT_STREAMFLAGS_LOOPBACK`). This gives you a read view
-of
-the audio mixer's final output — whatever is playing through your speakers or
-headphones — as a stream of raw PCM frames. A second WASAPI client is opened in
-normal shared-mode to **write back** the processed audio. The result is that all
-system audio is transparently intercepted, boosted, and returned before it
-reaches
-your hardware.
-
-The capture and render loops run on a dedicated high-priority thread
-(`AvSetMmThreadCharacteristicsW("Pro Audio", ...)`).
-
-### DSP chain (per audio buffer)
-
-Each 20 ms buffer goes through three stages in order:
-
-#### 1. Harmonic exciter (`harmonic_exciter.hpp/.cpp`)
-
-Headphones physically cannot reproduce frequencies below ~40–60 Hz. The harmonic
-exciter works around this with psychoacoustics: the human brain can *infer* a
-missing fundamental from its harmonics. If you hear a 120 Hz tone and a 180 Hz
-tone together, you perceive a 60 Hz bass note even if 60 Hz is absent.
-
-Implementation:
-1. **100 Hz low-pass filter (biquad)** — isolates the sub-bass signal.
-2. **Full-wave rectification** (`abs()`) — this is an even nonlinearity.
-   Applying it to
-   a 60 Hz sine `sin(ωt)` produces `|sin(ωt)|`, which contains the 2nd harmonic
-   (120 Hz) and higher even harmonics. Your headphones can reproduce 120 Hz.
-3. **40 Hz high-pass filter (biquad)** — removes DC and near-DC artifacts
-   introduced
-   by rectification.
-4. **Blend 25% back** into the stereo signal.
-
-This adds harmonic content in the range headphones can reproduce, and the brain
-reconstructs the implied fundamental.
-
-#### 2. Low-shelf biquad filter (`bass_boost_filter.hpp/.cpp`)
-
-A second-order IIR (infinite impulse response) filter derived from the
-[Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/) low-shelf formula.
-
-**What a biquad is:** A 2nd-order recursive filter described by the difference
-equation:
-
-```
-y[n] = b0·x[n] + b1·x[n-1] + b2·x[n-2]
-                - a1·y[n-1] - a2·y[n-2]
-```
-
-Five coefficients (`b0, b1, b2, a1, a2`) fully describe the filter. The two
-`y[n-k]` feedback terms are stored in a 2-element delay line (`z1, z2`) per
-channel, updated every sample. This is O(1) per sample and extremely cheap.
-
-**Low-shelf behaviour:** All frequencies below the shelf frequency (100 Hz) are
-boosted by `gain_db` dB. Frequencies above 100 Hz are passed through unchanged.
-The Q factor (0.707, Butterworth) controls how gradually the shelf rolls off at
-the cutoff — Butterworth is maximally flat, meaning no ripple in either the
-passband or stopband.
-
-**Slider mapping:** The slider position `p ∈ [0, 1]` maps to gain via a
-square-root curve:
-
-```cpp
-gain_db = kMaxGainDb * sqrt(1.0 - p);  // p=0 → 15 dB, p=1 → 0 dB
-```
-
-The square-root curve is convex: at the midpoint of slider travel you get
-~70.7% of max gain rather than 50%, so bass boost is audible immediately when
-you move the slider.
-
-#### 3. tanh soft limiter
-
-A high shelf gain can push sample amplitudes above ±1.0, causing hard digital
-clipping (the "pop" you'd hear at max boost). `std::tanh(x)` is applied
-per-sample after the DSP chain:
-
-- Near 0, `tanh(x) ≈ x` — transparent at normal levels.
-- Above ~±0.7, it compresses smoothly toward the ±1.0 asymptote instead of
-  hard-clipping.
-- No abrupt transition; no audible artifact.
-
-### Thread safety
-
-Gain updates (`SetSliderPosition`) are issued from the UI thread and read on the
-audio thread. The gain parameter is stored in a `std::atomic<double>`, so no
-mutex is needed on the hot path.
+# How to build
 
 ## Prerequisites
 
@@ -108,13 +20,13 @@ mutex is needed on the hot path.
    [Build Tools for Visual Studio 2019][vs2019-build-tools] or
    [Build Tools for Visual Studio 2022][vs2022-build-tools]
   with the same workload selected.
-- **CMake 3.16+** — included with Visual Studio 2019 16.5+ and all VS 2022
+- **CMake 3.16+** -- included with Visual Studio 2019 16.5+ and all VS 2022
    releases; also available standalone from [cmake.org][cmake-download].
 
 All commands below must be run from a **Developer Command Prompt for VS 2019**
 (or VS 2022, or any terminal where `cmake` and the MSVC toolchain are on
 `PATH`). You can open one from the Start menu:
-*Visual Studio 2019 → Developer Command Prompt*.
+*Visual Studio 2019 -> Developer Command Prompt*.
 
 ## Building and testing
 
@@ -142,8 +54,9 @@ Debug output lands in `build\bin\Debug\Win32BassBooster.exe`.
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Tests cover the DSP core (`bass_boost_filter`, `harmonic_exciter`) and all
-Win32 modules. Google Test is fetched automatically by CMake on first configure.
+Tests cover the DSP core (`bass_boost_filter`, `harmonic_exciter`,
+`endpoint_audio_format`) and all Win32 modules. Google Test and Google Mock are
+fetched automatically by CMake on first configure.
 
 ### Reconfiguring from scratch
 
@@ -156,56 +69,27 @@ cmake -B build
 cmake --build build --config Release
 ```
 
-## Building on GNU/Linux (or WSL on Windows)
-
-On Linux (Ubuntu, Debian, etc.) or Windows Subsystem for Linux, only the
-cross-platform DSP core and its tests build. The Win32 GUI and audio-engine
-modules are automatically skipped.
-
-### Prerequisites
-
-```bash
-sudo apt install build-essential cmake
-```
-
-### Build and test
-
-```bash
-cmake -B build
-cmake --build build
-cd build && ctest --output-on-failure
-```
-
-The DSP test binaries land in `build/bin/`:
-
-- `bass_boost_filter_test`
-- `harmonic_exciter_test`
-
-The Win32-specific tests (`audio_pipeline_test`, `theme_manager_test`,
-`main_window_test`) are excluded because they depend on Windows APIs unavailable
-on Linux.
-
 ## Building with VS Code
 
 ### Extensions
 
 Install these two extensions from the VS Code Marketplace:
 
-- [C/C++][vscode-cpptools] (ms-vscode.cpptools) — IntelliSense and debugging.
+- [C/C++][vscode-cpptools] (ms-vscode.cpptools) -- IntelliSense and debugging.
 - [CMake Tools][vscode-cmake-tools]
-  (ms-vscode.cmake-tools) — configure, build, and test without leaving the
+  (ms-vscode.cmake-tools) -- configure, build, and test without leaving the
   editor.
 
 ### Open the project
 
-**File → Open Folder** and select the `Win32BassBooster` directory. VS Code
+**File -> Open Folder** and select the `Win32BassBooster` directory. VS Code
 will detect `CMakeLists.txt` and CMake Tools will offer to configure the
 project automatically.
 
 ### Select a kit
 
 CMake Tools needs to know which compiler to use. When prompted, or via
-**Ctrl+Shift+P → CMake: Select a Kit**, choose:
+**Ctrl+Shift+P -> CMake: Select a Kit**, choose:
 
 ```
 Visual Studio Community 2019 Release - amd64
@@ -225,7 +109,7 @@ development.
 Click the **Build** button (hammer icon) in the status bar, or:
 
 ```
-Ctrl+Shift+P → CMake: Build
+Ctrl+Shift+P -> CMake: Build
 ```
 
 The executable is written to `build\bin\Release\Win32BassBooster.exe` (or
@@ -237,7 +121,7 @@ Open the **Testing** panel (beaker icon in the Activity Bar) to run and
 inspect individual tests, or run all of them at once:
 
 ```
-Ctrl+Shift+P → CMake: Run Tests
+Ctrl+Shift+P -> CMake: Run Tests
 ```
 
 ### Run / debug the application
@@ -245,40 +129,33 @@ Ctrl+Shift+P → CMake: Run Tests
 Use the status bar **launch target** selector (next to the play button) to
 pick **Win32BassBooster**, then:
 
-- **Ctrl+Shift+P → CMake: Run Without Debugging** — launch the built exe.
-- **Ctrl+Shift+P → CMake: Debug** — launch under the debugger with
+- **Ctrl+Shift+P -> CMake: Run Without Debugging** -- launch the built exe.
+- **Ctrl+Shift+P -> CMake: Debug** -- launch under the debugger with
   breakpoints.
-
-## Usage
-
-Run `Win32BassBooster.exe` on Windows. It captures whatever is currently playing
-through your default audio output device.
-
-- Drag the slider **left** to increase bass boost (up to +15 dB at 100 Hz).
-- Drag the slider **right** to return to flat (0 dB).
-- The title bar and colors follow your Windows dark/light theme setting.
 
 ## Project layout
 
 ```
 .
 ├── src/
-│   ├── bass_boost_filter.hpp/.cpp    # Biquad low-shelf IIR filter
-│   ├── harmonic_exciter.hpp/.cpp     # Psychoacoustic bass enhancement
-│   ├── endpoint_audio_format.hpp/.cpp # Endpoint frame decoding to stereo float
-│   ├── audio_pipeline.hpp/.cpp       # WASAPI loopback capture + re-render
-│   ├── theme_manager.hpp/.cpp        # Dark/light palette + DWM title bar
-│   ├── main_window.hpp/.cpp          # Top-level Win32 window
-│   ├── main.cpp                      # Entry point
-│   └── *_test.cpp                    # Unit tests (one per module)
+│   ├── bass_boost_filter.hpp/.cpp      # Biquad low-shelf IIR filter
+│   ├── harmonic_exciter.hpp/.cpp       # Psychoacoustic bass enhancement
+│   ├── endpoint_audio_format.hpp/.cpp  # Endpoint frame decoding to stereo float
+│   ├── audio_pipeline_interface.hpp    # Abstract audio pipeline contract
+│   ├── audio_pipeline.hpp/.cpp         # WASAPI loopback capture + re-render
+│   ├── theme_manager.hpp/.cpp          # Dark/light palette + DWM title bar
+│   ├── main_window.hpp/.cpp            # Top-level Win32 window
+│   ├── main.cpp                        # Entry point
+│   └── *_test.cpp                      # Unit tests (one per module)
 ├── resources/
-│   └── app.rc                        # Manifest, version info
+│   └── app.rc                          # Manifest, version info
 ├── .github/
-│   └── workflows/build.yml           # CI: build + test on every push/PR
-├── .clang-format                     # Code style (Google C++ style)
-├── .clang-tidy                       # Static analysis rules
+│   └── workflows/build.yml             # CI: build + test on every push/PR
+├── .clang-format                       # Code style (Google C++ style)
+├── .clang-tidy                         # Static analysis rules
 ├── .githooks/
-│   └── pre-commit                    # Auto-formats staged files on commit
+│   └── pre-commit                      # Auto-formats staged files on commit
+├── CMakePresets.json                    # CMake configure/build presets
 └── CMakeLists.txt
 ```
 
@@ -302,7 +179,7 @@ if either tool is missing, and CI enforces them on every push/PR.
 ### Installing LLVM on Windows
 
 1. Go to the [LLVM releases page][llvm-releases]
-   and download the Windows installer — look for a file named
+   and download the Windows installer -- look for a file named
    `LLVM-<version>-win64.exe`.
 2. Run the installer. On the **"Add LLVM to the system PATH"** screen, select
    **"Add LLVM to the system PATH for all users"** (or current user).
@@ -314,7 +191,7 @@ if either tool is missing, and CI enforces them on every push/PR.
    ```
 
    Both commands should print a version string. If they print `'clang-format'
-   is not recognized`, the LLVM `bin\` directory is not on `PATH` — add it
+   is not recognized`, the LLVM `bin\` directory is not on `PATH` -- add it
    manually (typically `C:\Program Files\LLVM\bin`):
 
    ```bat
@@ -332,19 +209,13 @@ if either tool is missing, and CI enforces them on every push/PR.
    You should now see `-- clang-format: ...` and `-- clang-tidy: ...` in the
    configure output instead of warnings.
 
-### Installing LLVM on Linux / WSL
-
-```bash
-sudo apt install clang-format clang-tidy
-```
-
 ### Registering the pre-commit hook
 
 `cmake -B build` registers `.githooks` as the git hooks directory
 automatically. After that, every `git commit` auto-formats staged `.cpp`/`.hpp`
 files with `clang-format` before the commit is recorded. If `clang-format` is
 not on `PATH` the hook prints a warning and proceeds (so you can still commit
-without it installed locally — CI will catch any formatting issues).
+without it installed locally -- CI will catch any formatting issues).
 
 ### Formatting all sources manually
 
@@ -361,7 +232,7 @@ cmake -B build -DENABLE_CLANG_TIDY=OFF
 ```
 
 This suppresses the warning and skips analysis. Do not land code built this way
-— the CI job always runs with clang-tidy enabled.
+-- the CI job always runs with clang-tidy enabled.
 
 ## CI and branch protection
 
@@ -369,18 +240,108 @@ GitHub Actions builds and tests every push and pull request. The badge above
 reflects the current status of `main`.
 
 To prevent merging broken code, enable branch protection in the GitHub
-repository
-settings:
+repository settings:
 
-1. **Settings → Branches → Add branch protection rule** for `main`.
+1. **Settings -> Branches -> Add branch protection rule** for `main`.
 2. Enable **Require status checks to pass before merging** and select the
-   `build`
-   check.
+   `build` check.
 3. Enable **Require branches to be up to date before merging**.
 4. Enable **Do not allow bypassing the above settings**.
 
 With these rules in place, no PR can be merged and no direct push to `main`
 can succeed unless the CI build and all tests pass.
+
+## How it works
+
+In the simplest terms, it intercepts all audio playing through your default
+output device, boosts the low frequencies, and plays it back.
+
+### WASAPI loopback capture
+
+WASAPI lets you open the default render endpoint in **loopback mode**
+(`AUDCLNT_STREAMFLAGS_LOOPBACK`). This gives you a read view of the audio
+mixer's final output as a stream of raw PCM frames. A second WASAPI client is
+opened in normal shared-mode to **write back** the processed audio. The result
+is that all system audio is transparently intercepted, boosted, and returned
+before it reaches your hardware.
+
+The capture and render loops run on a dedicated high-priority thread
+(`AvSetMmThreadCharacteristicsW("Pro Audio", ...)`).
+
+### DSP chain (per audio buffer)
+
+Each buffer goes through three stages in order:
+
+#### 1. Harmonic exciter (`harmonic_exciter.hpp/.cpp`)
+
+Headphones physically cannot reproduce frequencies below ~40-60 Hz. The harmonic
+exciter works around this with psychoacoustics: the human brain can *infer* a
+missing fundamental from its harmonics. If you hear a 120 Hz tone and a 180 Hz
+tone together, you perceive a 60 Hz bass note even if 60 Hz is absent.
+
+Implementation:
+1. **100 Hz low-pass filter (biquad)** -- isolates the sub-bass signal.
+2. **Full-wave rectification** (`abs()`) -- this is an even nonlinearity.
+   Applying it to a 60 Hz sine `sin(wt)` produces `|sin(wt)|`, which contains
+   the 2nd harmonic (120 Hz) and higher even harmonics. Your headphones can
+   reproduce 120 Hz.
+3. **40 Hz high-pass filter (biquad)** -- removes DC and near-DC artifacts
+   introduced by rectification.
+4. **Blend 25% back** into the stereo signal.
+
+This adds harmonic content in the range headphones can reproduce, and the brain
+reconstructs the implied fundamental.
+
+#### 2. Low-shelf biquad filter (`bass_boost_filter.hpp/.cpp`)
+
+A second-order IIR (infinite impulse response) filter derived from the
+[Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/) low-shelf formula.
+
+**What a biquad is:** A 2nd-order recursive filter described by the difference
+equation:
+
+```
+y[n] = b0*x[n] + b1*x[n-1] + b2*x[n-2]
+               - a1*y[n-1] - a2*y[n-2]
+```
+
+Five coefficients (`b0, b1, b2, a1, a2`) fully describe the filter. The two
+`y[n-k]` feedback terms are stored in a 2-element delay line (`z1, z2`) per
+channel, updated every sample. This is O(1) per sample and extremely cheap.
+
+**Low-shelf behaviour:** All frequencies below the shelf frequency (100 Hz) are
+boosted by `gain_db` dB. Frequencies above 100 Hz are passed through unchanged.
+The Q factor (0.707, Butterworth) controls how gradually the shelf rolls off at
+the cutoff -- Butterworth is maximally flat, meaning no ripple in either the
+passband or stopband.
+
+**Slider mapping:** The slider position `p` in [0, 1] maps to gain via a
+square-root curve:
+
+```cpp
+gain_db = kMaxGainDb * sqrt(1.0 - p);  // p=0 -> 15 dB, p=1 -> 0 dB
+```
+
+The square-root curve is convex: at the midpoint of slider travel you get
+~70.7% of max gain rather than 50%, so bass boost is audible immediately when
+you move the slider.
+
+#### 3. tanh soft limiter
+
+A high shelf gain can push sample amplitudes above +/-1.0, causing hard digital
+clipping (the "pop" you'd hear at max boost). `std::tanh(x)` is applied
+per-sample after the DSP chain:
+
+- Near 0, `tanh(x) ~= x` -- transparent at normal levels.
+- Above ~+/-0.7, it compresses smoothly toward the +/-1.0 asymptote instead of
+  hard-clipping.
+- No abrupt transition; no audible artifact.
+
+### Thread safety
+
+Gain updates (`SetBoostLevel`) are issued from the UI thread and read on the
+audio thread. The gain parameter is stored in a `std::atomic<double>`, so no
+mutex is needed on the hot path.
 
 [build-badge]:
 https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml/badge.svg
