@@ -82,31 +82,29 @@ Install these two extensions from the VS Code Marketplace:
 
 ### Open the project
 
-**File -> Open Folder** and select the `Win32BassBooster` directory. VS Code
-will detect `CMakeLists.txt` and CMake Tools will offer to configure the
-project automatically.
+**File -> Open Folder** and select the `Win32BassBooster` directory. CMake
+Tools will detect `CMakePresets.json` and offer to configure automatically.
 
-### Select a kit
+### Select a configure preset
 
-CMake Tools needs to know which compiler to use. When prompted, or via
-**Ctrl+Shift+P -> CMake: Select a Kit**, choose:
+The project uses **CMake presets** instead of kit selection. When prompted, or
+via **Ctrl+Shift+P -> CMake: Select Configure Preset**, choose:
 
 ```
-Visual Studio Community 2019 Release - amd64
+Visual Studio 2022 x64
 ```
 
-or the equivalent for your VS version (2022 works too). Pick any VS 2019/2022
-amd64 entry.
+This selects the VS 2022 generator with x64 architecture and enables both the
+GUI and test targets.
 
-### Set the build variant
+### Select a build preset
 
-The build type is shown in the status bar (bottom of the window). Click it and
-select **Release** for an optimised build, or leave it as **Debug** for
-development.
+Open **Ctrl+Shift+P -> CMake: Select Build Preset** and choose **release** or
+**debug**.
 
 ### Build
 
-Click the **Build** button (hammer icon) in the status bar, or:
+Press **F7**, click the **Build** button in the status bar, or:
 
 ```
 Ctrl+Shift+P -> CMake: Build
@@ -114,6 +112,17 @@ Ctrl+Shift+P -> CMake: Build
 
 The executable is written to `build\bin\Release\Win32BassBooster.exe` (or
 `build\bin\Debug\` for a Debug build).
+
+### Troubleshooting: platform mismatch
+
+If you see an error like `"generator platform: x64 does not match the platform
+used previously"`, delete the stale CMake cache and reconfigure:
+
+```bat
+rmdir /s /q build\CMakeCache.txt build\CMakeFiles
+```
+
+Then reopen the folder or run **Ctrl+Shift+P -> CMake: Configure**.
 
 ### Run the tests
 
