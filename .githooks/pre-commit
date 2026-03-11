@@ -1,0 +1,31 @@
+#!/bin/sh
+# .githooks/pre-commit
+# Runs clang-format on every staged .cpp/.hpp file and re-stages any
+# changes so the commit always contains formatted code.
+
+if ! command -v clang-format > /dev/null 2>&1; then
+    echo "pre-commit: clang-format not found, skipping format check"
+    exit 0
+fi
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(cpp|hpp)$')
+
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+REFORMATTED=""
+for FILE in $STAGED; do
+    clang-format -i "$FILE"
+    if ! git diff --quiet "$FILE"; then
+        REFORMATTED="$REFORMATTED $FILE"
+        git add "$FILE"
+    fi
+done
+
+if [ -n "$REFORMATTED" ]; then
+    echo "pre-commit: clang-format reformatted:$REFORMATTED"
+    echo "pre-commit: reformatted files have been re-staged"
+fi
+
+exit 0
