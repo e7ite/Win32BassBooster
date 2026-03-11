@@ -6,11 +6,14 @@ A simple, system-wide bass boost application for Windows.
 
 ![Win32 Bass Booster screenshot](bass-booster-screenshot.png)
 
-## How to use
+# How to use
 
-Run `Win32BassBooster.exe`, then drag the slider to choose how much bass boost
-you want. The window footer shows the current default render device name when
-startup succeeds.
+If you just want to use the app, download the latest packaged build from
+[Releases][github-releases], extract the archive, and run
+`Win32BassBooster.exe`.
+
+Then drag the slider to choose how much bass boost you want. The window footer
+shows the current default render device name when startup succeeds.
 
 # How to build
 
@@ -349,6 +352,7 @@ See [LICENSE](LICENSE) for the license terms for this repository.
 https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml/badge.svg
 [build-workflow]:
 https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml
+[github-releases]: https://github.com/e7ite/Win32BassBooster/releases
 [vs2022-build-tools]: https://aka.ms/vs/17/release/vs_BuildTools.exe
 [cmake-download]: https://cmake.org/download/
 [vscode-cpptools]:
