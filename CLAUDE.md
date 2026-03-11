@@ -134,3 +134,239 @@ std::memcpy(dst, src, bytes);
 // is sufficient to verify unity gain.
 ```
 
+### Control flow and complexity
+- Keep functions at or under 50 lines when practical.
+- Prefer one nesting level. Add a second level only when there is no simpler
+  correct form.
+- Prefer guard clauses and early returns to flatten control flow.
+- Separate logical units inside a function with a blank line so setup,
+  validation, mutation, and handoff steps are easy to scan quickly.
+- If a change would only be possible by adding deeper nesting, stop and report
+  the constraint.
+- Prefer simple constructs first (`if`, loops, anonymous-namespace helpers,
+  direct function calls).
+- Add complexity only when it is clearly justified by verified performance
+  constraints or maintainability and scalability needs.
+- Do not hide side effects in conditions (for example, assignment in `if`).
+- Use the simplest dispatch construct that fits current complexity:
+  direct conditionals or loops -> one-time switch or branch ->
+  strategy or polymorphism.
+- Escalate dispatch complexity only when simpler control flow cannot keep the
+  code clear or maintainable.
+- Avoid callback forwarding, non-generic template indirection, and recursion
+  when direct control flow expresses the same behavior.
+- If multiple code paths perform the same high-level action (`decode`,
+  `detect`, `serialize`) but differ in implementation, choose dispatch style by
+  complexity and expected growth.
+- Prefer one switch or branch point when the number of strategies is small and
+  each strategy body is short.
+- Do not introduce class-based runtime polymorphism for a small fixed set of
+  stateless strategies in a single call path (for example, 3-5 formats with
+  short bodies).
+- Prefer a strategy or polymorphic design when there are many strategies, each
+  strategy has substantial logic, or the strategy set is expected to grow.
+- In hot paths, account for runtime polymorphism cost. Virtual dispatch adds
+  indirection and often an indirect branch that can hurt branch prediction and
+  instruction-cache locality.
+- Before adding polymorphism, check whether one-time dispatch outside the hot
+  loop already removes repeated branching. If yes, keep the simpler design.
+- In hot paths and repeated loops, compute invariant metadata once at the
+  narrowest stable scope and reuse it in inner loops.
+- Avoid repeating the same switch in multiple places. Centralize dispatch once
+  and keep each strategy implementation in one location.
+
+```cpp
+// Bad: side effect hidden in condition.
+if (FAILED(start_status = StartWorker()) && !TryRecover(start_status)) {
+  return;
+}
+
+// Good: compute first, then branch.
+start_status = StartWorker();
+if (FAILED(start_status) && !TryRecover(start_status)) {
+  return;
+}
+```
+
+```cpp
+// Bad: unrelated steps are crammed together.
+const Status init = Init();
+if (!init.ok()) {
+  return init;
+}
+ApplySettings();
+StartWorker();
+
+// Good: blank lines separate logical units.
+const Status init = Init();
+if (!init.ok()) {
+  return init;
+}
+
+ApplySettings();
+
+StartWorker();
+```
+
+```cpp
+// Bad: deep nesting.
+void Process(const Frame& frame) {
+  if (!frame.empty()) {
+    if (is_running_) {
+      for (float sample : frame) {
+        if (sample > 0.0F) {
+          Apply(sample);
+        }
+      }
+    }
+  }
+}
+
+// Good: guard clauses flatten control flow.
+void Process(const Frame& frame) {
+  if (frame.empty() || !is_running_) {
+    return;
+  }
+  for (float sample : frame) {
+    if (sample <= 0.0F) {
+      continue;
+    }
+    Apply(sample);
+  }
+}
+```
+
+```cpp
+// Good: simple, one-time dispatch for a small fixed set.
+switch (mode) {
+  case Mode::kPcm16:
+    return DecodePcm16(bytes);
+  case Mode::kFloat32:
+    return DecodeFloat32(bytes);
+}
+
+// Bad: callback forwarding for local control flow.
+RunStep([this](Status status) { return Recover(status); });
+
+// Good: direct control flow.
+const StepStatus step_status = RunStep();
+if (FAILED(step_status.recover_status)) {
+  return;
+}
+
+// Bad: template indirection for non-generic logic.
+template <typename Fn>
+void Execute(Fn fn) {
+  fn();
+}
+
+// Good: concrete helper.
+void ExecuteStart();
+```
+
+```cpp
+// Bad: repeats invariant checks for every sample.
+for (size_t index = 0; index < sample_count; ++index) {
+  if (format.bits_per_sample == 16) {
+    ...
+  }
+  if (format.channel_count == 2) {
+    ...
+  }
+}
+
+// Good: derive once, reuse in the loop.
+const bool is_int16 = format.bits_per_sample == 16;
+const bool is_stereo = format.channel_count == 2;
+for (size_t index = 0; index < sample_count; ++index) {
+  if (is_int16) {
+    ...
+  }
+  if (is_stereo) {
+    ...
+  }
+}
+```
+
+```cpp
+// Bad: repeated switch across multiple call sites.
+Value HandleLeft(...) {
+  switch (mode) {
+    ...
+  }
+}
+Value HandleRight(...) {
+  switch (mode) {
+    ...
+  }
+}
+
+// Good: switch once, then reuse selected behavior.
+HandlerFunction handle = SelectHandlerFunction(mode);
+left = handle(left_input);
+right = handle(right_input);
+```
+
+### Refactoring behavior
+- Remove dead state, stale flags, and obsolete branches during the same
+  refactor.
+- Minimize scope at every level. Keep logic in the narrowest scope that works:
+  local variable -> anonymous namespace -> `private` member ->
+  `public` member or free function in a header. Promote scope only when
+  something genuinely needs to be shared.
+- When splitting long functions, prefer anonymous-namespace functions with
+  explicit inputs and outputs before adding new member functions.
+- Keep extracted helpers explicit: prefer clear inputs and outputs over hidden
+  shared state.
+
+```cpp
+// Bad: `RefreshCoefficients` is public but only `SetLevelDb` calls it.
+class ToneFilter {
+ public:
+  void SetLevelDb(double gain_db);
+  void RefreshCoefficients();  // internal detail leaked into the interface.
+};
+
+// Good: free helper in an anonymous namespace with explicit inputs.
+namespace {
+FilterCoefficients ComputeSectionCoefficients(double gain_db,
+                                              double sample_rate) {
+  ...
+}
+}  // namespace
+```
+
+```cpp
+// Bad: dead state left after refactor.
+bool cached_ready = false;  // no longer read anywhere.
+
+// Good: dead state removed in the same change.
+```
+
+```cpp
+// Bad: callback plumbing for local linear logic.
+RunStep([this](HRESULT hr) {
+  if (FAILED(hr)) {
+    Recover(hr);
+  }
+});
+
+// Good: direct control flow.
+const HRESULT step = RunStep();
+if (FAILED(step)) {
+  Recover(step);
+}
+```
+
+```cpp
+// Good: split long member function with an anonymous-namespace helper.
+namespace {
+void StopClientsAndFinalizeTask(IAudioClient* capture_client,
+                                IAudioClient* render_client,
+                                std::atomic<bool>* running,
+                                HANDLE task) {
+  ...
+}
+}  // namespace
+```
+
