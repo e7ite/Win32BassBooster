@@ -19,7 +19,6 @@
 
 #include "bass_boost_filter.hpp"
 #include "endpoint_audio_format.hpp"
-#include "harmonic_exciter.hpp"
 #include "loopback_capture_activation.hpp"
 
 namespace {
@@ -167,8 +166,8 @@ struct CapturedPacket {
 // packet is silent/empty; otherwise returns the failing HRESULT.
 [[nodiscard]] HRESULT ProcessCapturedPacket(
     const CapturedPacket& packet, const WAVEFORMATEX& capture_format,
-    HarmonicExciter& /*exciter*/, BassBoostFilter& filter,
-    IAudioClient& audio_client, IAudioRenderClient& audio_render_client) {
+    BassBoostFilter& filter, IAudioClient& audio_client,
+    IAudioRenderClient& audio_render_client) {
   const bool should_process_packet =
       (packet.flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0 && packet.frames > 0;
   if (!should_process_packet) {
@@ -495,7 +494,6 @@ struct ActiveStreamState {
   // Render mix format reused as the capture format; process loopback
   // captures in whatever format the render endpoint uses.
   WAVEFORMATEX* format;
-  HarmonicExciter& exciter;
   BassBoostFilter& filter;
 };
 
@@ -530,8 +528,8 @@ struct ActiveStreamState {
     const CapturedPacket packet{
         .bytes = capture_bytes, .frames = frames, .flags = flags};
     if (const HRESULT process_packet = ProcessCapturedPacket(
-            packet, *stream.format, stream.exciter, stream.filter,
-            *stream.render_client, *stream.render_service);
+            packet, *stream.format, stream.filter, *stream.render_client,
+            *stream.render_service);
         FAILED(process_packet)) {
       stream.capture_service->ReleaseBuffer(frames);
       return process_packet;
@@ -560,7 +558,6 @@ struct RunningPipelineState {
   // captures in whatever format the render endpoint uses.
   ScopedWaveFormat& render_format;
   BassBoostFilter& filter;
-  HarmonicExciter& exciter;
   std::atomic<bool>& running;
   std::wstring& endpoint_name;
 };
@@ -595,7 +592,6 @@ struct RunningPipelineState {
   const double sample_rate =
       static_cast<double>(clients.render.format->nSamplesPerSec);
   state.filter.SetSampleRate(sample_rate);
-  state.exciter.SetSampleRate(sample_rate);
 
   state.enumerator = std::move(endpoint.enumerator);
   state.render_device = std::move(endpoint.render_device);
@@ -657,7 +653,6 @@ void RunAudioThreadLoop(RunningPipelineState& state, std::stop_token stoken) {
         .capture_service = state.capture_service.get(),
         .render_service = state.render_service.get(),
         .format = state.render_format.get(),
-        .exciter = state.exciter,
         .filter = state.filter};
 
     const HRESULT drain = DrainCaptureQueue(stream_state, stoken);
@@ -710,7 +705,6 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
   const double sample_rate =
       static_cast<double>(clients.render.format->nSamplesPerSec);
   filter_.SetSampleRate(sample_rate);
-  exciter_.SetSampleRate(sample_rate);
 
   if (needs_pipeline_init) {
     enumerator_ = std::move(endpoint.enumerator);
@@ -734,7 +728,6 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
                                .render_service = render_service_,
                                .render_format = render_format_,
                                .filter = filter_,
-                               .exciter = exciter_,
                                .running = running_,
                                .endpoint_name = endpoint_name_};
     RunAudioThreadLoop(state, std::move(stoken));

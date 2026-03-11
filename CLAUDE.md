@@ -331,6 +331,14 @@ right = handle(right_input);
   unused variables, stale flags, obsolete branches, and any code that is
   defined but never called. Do this in the same change that makes it dead,
   not in a follow-up.
+- This applies at every scale: a single unused variable, a function no
+  caller invokes, and an entire module (`.hpp`, `.cpp`, `_test.cpp`, CMake
+  target) that nothing in the live code path uses. When a module is wired
+  into the build and passed around in structs or function parameters but
+  never actually called in the processing path, it is dead code. Remove
+  the source files, the CMake library and test targets, the link
+  dependency, all include directives, struct fields, function parameters,
+  member variables, and tests that exercise the removed module.
 - Minimize scope at every level. Keep logic in the narrowest scope that works:
   local variable -> anonymous namespace -> `private` member ->
   `public` member or free function in a header. Promote scope only when

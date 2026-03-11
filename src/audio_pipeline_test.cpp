@@ -1,5 +1,5 @@
-﻿// Verifies the pipeline's initial state, boost level clamping, gain curve
-// shape, and exciter amount scaling before any audio device has been opened.
+﻿// Verifies the pipeline's initial state, boost level clamping, and gain curve
+// shape before any audio device has been opened.
 
 #include "audio_pipeline.hpp"
 
@@ -36,28 +36,12 @@ TEST(AudioPipelineTest, MaxBoostSetsMaxGain) {
   EXPECT_NEAR(pipeline.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
 }
 
-TEST(AudioPipelineTest, MaxBoostSetsMaxExciter) {
-  AudioPipeline pipeline;
-
-  pipeline.SetBoostLevel(1.0);
-
-  EXPECT_NEAR(pipeline.exciter_amount(), 1.0, 1e-9);
-}
-
 TEST(AudioPipelineTest, FlatBoostSetsZeroGain) {
   AudioPipeline pipeline;
 
   pipeline.SetBoostLevel(0.0);
 
   EXPECT_NEAR(pipeline.gain_db(), 0.0, 1e-9);
-}
-
-TEST(AudioPipelineTest, FlatBoostSetsZeroExciter) {
-  AudioPipeline pipeline;
-
-  pipeline.SetBoostLevel(0.0);
-
-  EXPECT_NEAR(pipeline.exciter_amount(), 0.0, 1e-9);
 }
 
 TEST(AudioPipelineTest, HalfBoostScalesGainBySqrt) {
@@ -98,7 +82,6 @@ TEST(AudioPipelineTest, BoostLevelClampedAboveOne) {
   pipeline.SetBoostLevel(kAboveMaxLevel);
 
   EXPECT_NEAR(pipeline.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
-  EXPECT_NEAR(pipeline.exciter_amount(), 1.0, 1e-9);
 }
 
 TEST(AudioPipelineTest, BoostLevelClampedBelowZero) {
@@ -107,13 +90,6 @@ TEST(AudioPipelineTest, BoostLevelClampedBelowZero) {
   pipeline.SetBoostLevel(-1.0);
 
   EXPECT_NEAR(pipeline.gain_db(), 0.0, 1e-9);
-  EXPECT_NEAR(pipeline.exciter_amount(), 0.0, 1e-9);
-}
-
-TEST(AudioPipelineTest, DefaultExciterAmountIsZero) {
-  AudioPipeline pipeline;
-
-  EXPECT_NEAR(pipeline.exciter_amount(), 0.0, 1e-9);
 }
 
 TEST(AudioPipelineTest, StopBeforeStartIsSafe) {
@@ -132,15 +108,6 @@ TEST(AudioPipelineTest, RepeatedBoostLevelUpdatesReflectLatest) {
   pipeline.SetBoostLevel(1.0);
 
   EXPECT_NEAR(pipeline.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
-}
-
-TEST(AudioPipelineTest, ExciterAmountAtThreeQuarterLevel) {
-  constexpr double kThreeQuarterLevel = 0.75;
-  AudioPipeline pipeline;
-
-  pipeline.SetBoostLevel(kThreeQuarterLevel);
-
-  EXPECT_NEAR(pipeline.exciter_amount(), kThreeQuarterLevel, 1e-9);
 }
 
 TEST(AudioPipelineTest, GainFollowsSqrtAtThreeQuarterLevel) {

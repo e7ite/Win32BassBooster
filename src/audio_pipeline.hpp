@@ -19,7 +19,6 @@
 
 #include "audio_pipeline_interface.hpp"
 #include "bass_boost_filter.hpp"
-#include "harmonic_exciter.hpp"
 
 class AudioPipeline final : public AudioPipelineInterface {
  public:
@@ -35,14 +34,10 @@ class AudioPipeline final : public AudioPipelineInterface {
   void SetBoostLevel(double level) override {
     const double clamped = std::clamp(level, 0.0, 1.0);
     filter_.SetGainDb(BassBoostFilter::kMaxGainDb * std::sqrt(clamped));
-    exciter_.SetAmount(clamped);
   }
 
   [[nodiscard]] bool is_running() const noexcept { return running_.load(); }
   [[nodiscard]] double gain_db() const override { return filter_.gain_db(); }
-  [[nodiscard]] double exciter_amount() const noexcept {
-    return exciter_.amount();
-  }
   [[nodiscard]] const std::wstring& endpoint_name() const override {
     return endpoint_name_;
   }
@@ -96,9 +91,6 @@ class AudioPipeline final : public AudioPipelineInterface {
 
   // Low-shelf EQ that boosts bass frequencies. Applied first in the DSP chain.
   BassBoostFilter filter_;
-  // Generates upper harmonics from bass content so the boost is audible on
-  // speakers that cannot reproduce low frequencies directly.
-  HarmonicExciter exciter_;
 
   // Runs the capture-DSP-render loop off the UI thread so audio processing
   // never blocks the window message pump.

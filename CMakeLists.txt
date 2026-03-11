@@ -131,16 +131,6 @@ else()
 endif()
 target_enable_clang_tidy(bass_boost_filter)
 
-add_library(harmonic_exciter STATIC src/harmonic_exciter.cpp)
-target_include_directories(harmonic_exciter PUBLIC src)
-if(MSVC)
-    target_compile_options(harmonic_exciter PRIVATE
-        $<$<NOT:$<CONFIG:Debug>>:/O2>)
-else()
-    target_compile_options(harmonic_exciter PRIVATE -O2)
-endif()
-target_enable_clang_tidy(harmonic_exciter)
-
 # -----------------------------------------------------------------------
 # Audio and UI static libraries
 # -----------------------------------------------------------------------
@@ -164,7 +154,7 @@ if(WIN32)
     add_library(audio_pipeline STATIC src/audio_pipeline.cpp)
     target_include_directories(audio_pipeline PUBLIC src)
     target_link_libraries(audio_pipeline PUBLIC
-        endpoint_audio_format bass_boost_filter harmonic_exciter
+        endpoint_audio_format bass_boost_filter
         loopback_capture_activation
         ole32 oleaut32 uuid avrt mmdevapi)
     target_enable_clang_tidy(audio_pipeline)
@@ -211,14 +201,6 @@ if(BUILD_TESTS)
     add_test(NAME bass_boost_filter_test
              COMMAND $<TARGET_FILE:bass_boost_filter_test> --gtest_color=yes)
     target_enable_clang_tidy(bass_boost_filter_test)
-
-    add_executable(harmonic_exciter_test src/harmonic_exciter_test.cpp)
-    target_link_libraries(harmonic_exciter_test PRIVATE
-        harmonic_exciter GTest::gtest_main)
-    target_include_directories(harmonic_exciter_test PRIVATE src)
-    add_test(NAME harmonic_exciter_test
-             COMMAND $<TARGET_FILE:harmonic_exciter_test> --gtest_color=yes)
-    target_enable_clang_tidy(harmonic_exciter_test)
 
     # --- Windows integration tests ---
     if(WIN32)
