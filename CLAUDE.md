@@ -386,6 +386,30 @@ void StopClientsAndFinalizeTask(IAudioClient* capture_client,
 - If a use site starts sounding repetitive (`capture.capture_audio_client`),
   rename one side so the repeated concept appears only once. Prefer removing
   redundant words over introducing abbreviations.
+- Avoid names in the same scope that differ only in word order. This applies
+  to class members, struct fields, local variables, and function parameters
+  alike. Names that read as rearrangements of the same words are easy to
+  confuse and hard to distinguish at a glance. Rename so each has a distinct
+  keyword.
+
+```cpp
+// Bad: near-anagrams in the same class; easy to swap by accident.
+ComPtr<IAudioClient> capture_audio_client_;
+ComPtr<IAudioCaptureClient> audio_capture_client_;
+
+// Good: distinct suffixes make the difference immediately visible.
+ComPtr<IAudioClient> capture_client_;
+ComPtr<IAudioCaptureClient> capture_service_;
+
+// Bad: local variables that are word-order rearrangements.
+auto render_buffer_size = GetBufferSize();
+auto buffer_render_size = GetOutputSize();
+
+// Good: each name has a unique keyword.
+auto render_buffer_size = GetBufferSize();
+auto output_frame_count = GetOutputSize();
+```
+
 - For test doubles, do not encode the double type in variable names when the
   type already makes that clear. Name by role.
 - A type name must cover all of its members, not just a subset. If the name
@@ -427,12 +451,13 @@ class AudioSink {
 std::unique_ptr<Processor> processor;
 HRESULT render_start = S_OK;
 CaptureSetupState& setup = ...;
-setup.capture_audio_client.reset();
+setup.service.reset();
 
-// Bad.
+// Bad: variable name repeats the member concept; mock prefix is redundant
+// with the type.
 MockAudioEngine mock_audio_engine;
 CaptureSetupState& capture = ...;
-capture.capture_audio_client.reset();
+capture.capture_service.reset();
 
 // Good.
 MockAudioEngine audio_engine;
@@ -658,6 +683,12 @@ Alternatives considered:
 ```
 
 ### Testing
+- Every new source file (`*.cpp` / `*.hpp`) must have a corresponding
+  `*_test.cpp`. Add the test file and CMake wiring in the same change that
+  introduces the source file. If the module's public API touches hardware or
+  COM, test the observable contract (status codes, output pointer state,
+  error messages) by calling the real function under controlled conditions
+  (for example, COM initialized vs. uninitialized).
 - Prefer `TEST()` over `TEST_F()`. Only use a fixture when `SetUp()` and
   `TearDown()` genuinely manage a resource lifecycle (for example, creating and
   destroying a real Win32 window). Sharing a constant or a trivially
@@ -912,15 +943,35 @@ const double delay = ...;  // no suppression needed
 ```
 
 ### Keeping everything current
-- Any time you touch a file, scan for stale references: renamed identifiers,
-  outdated comments, stale examples, and mismatches between docs and code.
-- When adding or modifying any code element -- function, struct, class, data
-  member, file header, or inline logic -- ensure its comment exists and
-  follows the comment guidelines. When changing behavior, contracts, members,
-  or purpose, update the corresponding comment to match.
-- Apply this consistently to source files, tests, and `CLAUDE.md`.
+- After every rename, move, or semantic change, audit all affected files for
+  stale artifacts before considering the task done. This is not limited to
+  comments -- check every category:
+  - **Names**: member names, variable names, parameter names, and type names
+    that reference an old concept. A member called `capture_format` that
+    actually holds a render format is stale even if the code compiles.
+  - **Comments**: inline comments, struct and class descriptions, function
+    declaration comments, data member comments, and file headers that
+    reference old names, old relationships, or old behavior.
+  - **Documentation**: `CLAUDE.md` examples, `README.md` references, and any
+    other prose that mentions the changed element.
+  - **Missing documentation**: every new or renamed code element (struct,
+    class, function, data member, file) must have a comment that follows the
+    comment guidelines. If a rename introduces a new concept (for example
+    `service` replacing `audio_capture_client`), the comment must explain
+    what the new name means in context.
+- Apply this consistently to source files, headers, tests, and `CLAUDE.md`.
 
 ```cpp
+// Bad: member name references a concept that no longer exists. The field
+// actually holds the render mix format, but the name implies a separate
+// capture format.
+WAVEFORMATEX* capture_format;
+
+// Good: name matches what the field holds; comment explains the dual role.
+// Render mix format reused as the capture format; process loopback
+// captures in whatever format the render endpoint uses.
+WAVEFORMATEX* format;
+
 // Bad: struct added without explaining what it groups.
 struct StreamClientSetup {
   CaptureClientSetup capture;
