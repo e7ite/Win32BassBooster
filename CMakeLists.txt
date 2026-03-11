@@ -144,6 +144,15 @@ endif()
 target_enable_clang_tidy(harmonic_exciter)
 
 # -----------------------------------------------------------------------
+# Win32-only static libraries
+# -----------------------------------------------------------------------
+if(WIN32)
+    add_library(endpoint_audio_format STATIC src/endpoint_audio_format.cpp)
+    target_include_directories(endpoint_audio_format PUBLIC src)
+    target_enable_clang_tidy(endpoint_audio_format)
+endif()
+
+# -----------------------------------------------------------------------
 # Tests
 # -----------------------------------------------------------------------
 if(BUILD_TESTS)
@@ -163,4 +172,16 @@ if(BUILD_TESTS)
     add_test(NAME harmonic_exciter_test
              COMMAND $<TARGET_FILE:harmonic_exciter_test> --gtest_color=yes)
     target_enable_clang_tidy(harmonic_exciter_test)
+
+    # --- Win32-only tests ---
+    if(WIN32)
+        add_executable(endpoint_audio_format_test
+            src/endpoint_audio_format_test.cpp)
+        target_link_libraries(endpoint_audio_format_test PRIVATE
+            endpoint_audio_format GTest::gtest_main)
+        target_include_directories(endpoint_audio_format_test PRIVATE src)
+        add_test(NAME endpoint_audio_format_test
+                 COMMAND $<TARGET_FILE:endpoint_audio_format_test> --gtest_color=yes)
+        target_enable_clang_tidy(endpoint_audio_format_test)
+    endif()
 endif()
