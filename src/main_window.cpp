@@ -19,13 +19,14 @@ namespace {
 constexpr int kHeaderH = 56;
 constexpr int kFooterH = 52;
 constexpr int kSliderH = 40;
-constexpr int kFooterGap = 4;       // gap between slider bottom and footer top
-constexpr int kLabelH = 24;         // slider label row height
-constexpr int kSliderMarginH = 40;  // horizontal margin each side of slider
-constexpr int kLabelColW = 80;      // left/right label column width
-constexpr int kBadgeW = 120;        // dB badge area reserved at header right
-constexpr int kTextPadL = 16;       // left text padding in header
-constexpr int kFooterPad = 12;      // horizontal text padding in footer
+constexpr int kFooterGap = 4;        // gap between slider bottom and footer top
+constexpr int kLabelH = 24;          // slider label row height
+constexpr int kSliderMarginH = 8;    // horizontal margin each side of slider
+constexpr int kSliderThumbLen = 16;  // narrow thumb so it reaches both edges
+constexpr int kLabelColW = 80;       // left/right label column width
+constexpr int kBadgeW = 120;         // dB badge area reserved at header right
+constexpr int kTextPadL = 16;        // left text padding in header
+constexpr int kFooterPad = 12;       // horizontal text padding in footer
 
 constexpr int kFontTitle = 26;
 constexpr int kFontSub = 13;
@@ -164,8 +165,10 @@ void PaintSliderLabel(HDC hdc, const PaintContext& ctx) {
   SetTextColor(hdc, ctx.palette.text_muted);
 
   RECT left_rc = ctx.slider_label_rc;
+  left_rc.left += kSliderMarginH;
   left_rc.right = left_rc.left + kLabelColW;
   RECT right_rc = ctx.slider_label_rc;
+  right_rc.right -= kSliderMarginH;
   right_rc.left = right_rc.right - kLabelColW;
   RECT cent_rc = ctx.slider_label_rc;
   cent_rc.left += kLabelColW;
@@ -368,8 +371,8 @@ void MainWindow::OnCreate(HWND hwnd) {
   const int slider_top = height - kFooterH - kFooterGap - kSliderH;
   slider_hwnd_ = CreateWindowExW(
       /*dwExStyle=*/0, TRACKBAR_CLASSW, /*lpWindowName=*/nullptr,
-      WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS | TBS_BOTH, kSliderMarginH,
-      slider_top, width - (kSliderMarginH * 2), kSliderH, hwnd,
+      WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS | TBS_FIXEDLENGTH,
+      kSliderMarginH, slider_top, width - (kSliderMarginH * 2), kSliderH, hwnd,
       reinterpret_cast<HMENU>(
           static_cast<INT_PTR>(kMainWindowParams.slider_control_id)),
       instance_, /*lpParam=*/nullptr);
@@ -381,6 +384,7 @@ void MainWindow::OnCreate(HWND hwnd) {
   SendMessageW(slider_hwnd_, TBM_SETPOS, TRUE, kMainWindowParams.slider_min);
   SendMessageW(slider_hwnd_, TBM_SETPAGESIZE, /*wParam=*/0,
                kMainWindowParams.slider_max / kSliderPageDivisor);
+  SendMessageW(slider_hwnd_, TBM_SETTHUMBLENGTH, kSliderThumbLen, /*lParam=*/0);
 
   // Empty theme name strips the visual style so `WM_CTLCOLORSCROLLBAR` messages
   // reach the parent, enabling custom track and thumb colors.
