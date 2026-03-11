@@ -13,7 +13,6 @@
 #include <functiondiscoverykeys_devpkey.h>
 #include <mmdeviceapi.h>
 
-#include <cmath>
 #include <cstring>
 #include <span>
 #include <string_view>
@@ -110,26 +109,6 @@ void StopClientsAndFinalizeIfReady(IAudioClient* capture_audio_client,
     return next_packet_size;
   }
   return S_OK;
-}
-
-// Applies the bass boost filter in-place, then attenuates by the square root
-// of the linear gain so bass peaks stay near full scale while mids and highs
-// drop proportionally. At 12 dB boost the linear gain is ~4x, so
-// output_gain = 1/sqrt(4) = 0.5: bass ends up ~2x louder, mids drop to 0.5x,
-// and bass is 12 dB louder than mids - the "YouTube bass boost" sound.
-void ApplyDspChain(std::span<float> pcm_buf, HarmonicExciter& /*exciter*/,
-                   BassBoostFilter& filter) {
-  filter.ProcessStereo(pcm_buf);
-
-  const double gain_db = filter.gain_db();
-  const float output_gain =
-      gain_db > 0.0
-          ? static_cast<float>(1.0 / std::sqrt(std::pow(10.0, gain_db / 20.0)))
-          : 1.0F;
-
-  for (float& sample : pcm_buf) {
-    sample = std::clamp(sample * output_gain, -1.0F, 1.0F);
-  }
 }
 
 // Copies processed stereo float samples into the render client's buffer.
