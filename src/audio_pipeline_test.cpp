@@ -1,10 +1,13 @@
 ﻿// Verifies the pipeline's initial state, boost level clamping, gain curve
-// shape, and stop idempotency before any audio device has been opened.
+// shape, stop idempotency, and start/stop lifecycle with real COM resources.
 
 #include "audio_pipeline.hpp"
 
+#include <objbase.h>
+
 #include <cmath>
 #include <memory>
+#include <string>
 
 #include "bass_boost_filter.hpp"
 #include "gtest/gtest.h"
@@ -168,6 +171,96 @@ TEST(AudioPipelineTest, GainFollowsSqrtAtNinetyPercentLevel) {
   EXPECT_NEAR(pipeline.gain_db(),
               BassBoostFilter::kMaxGainDb * std::sqrt(kNinetyPercentLevel),
               1e-9);
+}
+
+TEST(AudioPipelineTest, StartFailsWithoutComInitialization) {
+  AudioPipeline pipeline;
+
+  const AudioPipelineInterface::Status status = pipeline.Start();
+
+  EXPECT_FALSE(status.ok());
+  EXPECT_TRUE(FAILED(status.code));
+  EXPECT_FALSE(status.error_message.empty());
+  EXPECT_FALSE(pipeline.is_running());
+}
+
+TEST(AudioPipelineTest, StartSucceedsWithComInitialized) {
+  const HRESULT com_init =
+      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
+  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
+
+  AudioPipeline pipeline;
+
+  const AudioPipelineInterface::Status status = pipeline.Start();
+
+  ASSERT_TRUE(status.ok());
+  EXPECT_TRUE(pipeline.is_running());
+  EXPECT_FALSE(pipeline.endpoint_name().empty());
+
+  pipeline.Stop();
+
+  EXPECT_FALSE(pipeline.is_running());
+
+  CoUninitialize();
+}
+
+TEST(AudioPipelineTest, StartWhileRunningReturnsOk) {
+  const HRESULT com_init =
+      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
+  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
+
+  AudioPipeline pipeline;
+
+  const AudioPipelineInterface::Status first_start = pipeline.Start();
+  ASSERT_TRUE(first_start.ok());
+
+  // Calling Start a second time while already running returns Ok immediately.
+  const AudioPipelineInterface::Status second_start = pipeline.Start();
+
+  EXPECT_TRUE(second_start.ok());
+  EXPECT_TRUE(pipeline.is_running());
+
+  pipeline.Stop();
+
+  CoUninitialize();
+}
+
+TEST(AudioPipelineTest, BoostLevelUpdatesWhileRunning) {
+  const HRESULT com_init =
+      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
+  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
+
+  AudioPipeline pipeline;
+
+  const AudioPipelineInterface::Status status = pipeline.Start();
+  ASSERT_TRUE(status.ok());
+
+  pipeline.SetBoostLevel(1.0);
+
+  EXPECT_NEAR(pipeline.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
+
+  pipeline.Stop();
+
+  CoUninitialize();
+}
+
+TEST(AudioPipelineTest, StopAfterStartCleansUpResources) {
+  const HRESULT com_init =
+      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
+  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
+
+  AudioPipeline pipeline;
+
+  ASSERT_TRUE(pipeline.Start().ok());
+  ASSERT_TRUE(pipeline.is_running());
+
+  pipeline.Stop();
+
+  EXPECT_FALSE(pipeline.is_running());
+  // Endpoint name persists after stop.
+  EXPECT_FALSE(pipeline.endpoint_name().empty());
+
+  CoUninitialize();
 }
 
 }  // namespace
