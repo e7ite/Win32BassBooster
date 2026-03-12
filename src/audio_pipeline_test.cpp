@@ -1,9 +1,10 @@
-﻿// Verifies the pipeline's initial state, boost level clamping, and gain curve
-// shape before any audio device has been opened.
+﻿// Verifies the pipeline's initial state, boost level clamping, gain curve
+// shape, and stop idempotency before any audio device has been opened.
 
 #include "audio_pipeline.hpp"
 
 #include <cmath>
+#include <memory>
 
 #include "bass_boost_filter.hpp"
 #include "gtest/gtest.h"
@@ -118,6 +119,54 @@ TEST(AudioPipelineTest, GainFollowsSqrtAtThreeQuarterLevel) {
 
   EXPECT_NEAR(pipeline.gain_db(),
               BassBoostFilter::kMaxGainDb * std::sqrt(kThreeQuarterLevel),
+              1e-9);
+}
+
+TEST(AudioPipelineTest, DoubleStopIsSafe) {
+  AudioPipeline pipeline;
+
+  pipeline.Stop();
+  pipeline.Stop();
+
+  EXPECT_FALSE(pipeline.is_running());
+}
+
+TEST(AudioPipelineTest, DestructorAfterStopIsSafe) {
+  auto pipeline = std::make_unique<AudioPipeline>();
+  pipeline->Stop();
+  pipeline.reset();
+
+  // If we reach here, the destructor did not crash after explicit Stop.
+  SUCCEED();
+}
+
+TEST(AudioPipelineTest, SetBoostLevelAfterStopStillUpdatesGain) {
+  AudioPipeline pipeline;
+
+  pipeline.Stop();
+  pipeline.SetBoostLevel(1.0);
+
+  EXPECT_NEAR(pipeline.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
+}
+
+TEST(AudioPipelineTest, GainFollowsSqrtAtTenPercentLevel) {
+  constexpr double kTenPercentLevel = 0.1;
+  AudioPipeline pipeline;
+
+  pipeline.SetBoostLevel(kTenPercentLevel);
+
+  EXPECT_NEAR(pipeline.gain_db(),
+              BassBoostFilter::kMaxGainDb * std::sqrt(kTenPercentLevel), 1e-9);
+}
+
+TEST(AudioPipelineTest, GainFollowsSqrtAtNinetyPercentLevel) {
+  constexpr double kNinetyPercentLevel = 0.9;
+  AudioPipeline pipeline;
+
+  pipeline.SetBoostLevel(kNinetyPercentLevel);
+
+  EXPECT_NEAR(pipeline.gain_db(),
+              BassBoostFilter::kMaxGainDb * std::sqrt(kNinetyPercentLevel),
               1e-9);
 }
 
