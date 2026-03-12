@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      pages_enabled: ${{ steps.pages-state.outputs.enabled }}
 
     steps:
       - uses: actions/checkout@v4
@@ -132,15 +134,47 @@ jobs:
             -NoNewline
 
       - name: Configure GitHub Pages
+        id: configure-pages
+        continue-on-error: true
         if: >
           github.event_name != 'pull_request' &&
           github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
 
-      - name: Upload coverage Pages artifact
+      - name: Set Pages deployment flag
+        id: pages-state
+        shell: pwsh
+        run: |
+          $pagesEnabled = 'false'
+          if ('${{ github.event_name }}' -ne 'pull_request' -and
+              '${{ github.ref }}' -eq 'refs/heads/main' -and
+              '${{ steps.configure-pages.outcome }}' -eq 'success') {
+            $pagesEnabled = 'true'
+          }
+          "enabled=$pagesEnabled" | Out-File -FilePath $env:GITHUB_OUTPUT `
+            -Append
+
+      - name: Note skipped Pages deployment
         if: >
           github.event_name != 'pull_request' &&
-          github.ref == 'refs/heads/main'
+          github.ref == 'refs/heads/main' &&
+          steps.configure-pages.outcome != 'success'
+        shell: pwsh
+        run: |
+          $summary = @(
+            '## Pages deployment skipped',
+            '',
+            'Coverage artifacts were generated, but GitHub Pages is not',
+            'enabled for this repository yet.',
+            '',
+            'Enable Pages once in repository settings with the source set',
+            'to GitHub Actions, then rerun this workflow to publish the',
+            'public HTML report and README badge.'
+          ) -join "`n"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
+
+      - name: Upload coverage Pages artifact
+        if: steps.pages-state.outputs.enabled == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: coverage
@@ -154,9 +188,7 @@ jobs:
           if-no-files-found: ignore
 
   deploy-coverage:
-    if: >
-      github.event_name != 'pull_request' &&
-      github.ref == 'refs/heads/main'
+    if: needs.build.outputs.pages_enabled == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:
