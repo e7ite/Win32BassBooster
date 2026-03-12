@@ -1,6 +1,6 @@
 # Win32 Bass Booster
 
-[![Build][build-badge]][build-workflow]
+[![Build][build-badge]][build-workflow] [![Coverage][cov-badge]][cov-report]
 
 A simple, system-wide bass boost application for Windows.
 
@@ -247,7 +247,9 @@ Do not land code built this way without running the normal checks again.
 ## CI and branch protection
 
 GitHub Actions builds and tests every push and pull request. The badge above
-reflects the current status of `main`.
+reflects the current status of `main`. Each run also uploads a Windows coverage
+artifact and writes a short coverage summary into the Actions job output. Pushes
+to `main` publish the HTML report and coverage badge through GitHub Pages.
 
 To prevent merging broken code, enable branch protection in the GitHub
 repository settings:
@@ -415,6 +417,10 @@ See [LICENSE](LICENSE) for the license terms for this repository.
 https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml/badge.svg
 [build-workflow]:
 https://github.com/e7ite/Win32BassBooster/actions/workflows/build.yml
+[cov-badge]:
+https://e7ite.github.io/Win32BassBooster/coverage-badge.svg
+[cov-report]:
+https://e7ite.github.io/Win32BassBooster/html/index.html
 [github-releases]: https://github.com/e7ite/Win32BassBooster/releases
 [vs2022-build-tools]: https://aka.ms/vs/17/release/vs_BuildTools.exe
 [cmake-download]: https://cmake.org/download/

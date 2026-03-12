@@ -3,6 +3,7 @@ name: Build
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,6 +15,9 @@ jobs:
       - name: Install LLVM/clang-tidy
         run: choco install llvm --yes
 
+      - name: Install OpenCppCoverage
+        run: choco install opencppcoverage --yes
+
       - name: Configure
         run: >
           cmake -B build
@@ -22,5 +26,134 @@ jobs:
       - name: Build (includes clang-tidy)
         run: cmake --build build --config Release
 
-      - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Test with coverage
+        shell: pwsh
+        run: |
+          $coverageDir = Join-Path $env:GITHUB_WORKSPACE coverage
+          New-Item -ItemType Directory -Path $coverageDir -Force | Out-Null
+
+          $coverageExe =
+            (Get-Command OpenCppCoverage.exe -ErrorAction Stop).Source
+          $coverageArgs = @(
+            '--sources', "$env:GITHUB_WORKSPACE\src",
+            '--cover_children',
+            '--export_type', "cobertura:$coverageDir\coverage.xml",
+            '--export_type', "html:$coverageDir\html",
+            '--',
+            'ctest', '--test-dir', 'build', '-C', 'Release',
+            '--output-on-failure'
+          )
+          & $coverageExe @coverageArgs
+
+      - name: Summarize coverage
+        if: always() && hashFiles('coverage/coverage.xml') != ''
+        shell: pwsh
+        run: |
+          [xml]$coverage = Get-Content coverage\coverage.xml
+          $lineRate = [double]$coverage.coverage.'line-rate' * 100.0
+          $branchRate = [double]$coverage.coverage.'branch-rate' * 100.0
+          $summary = @(
+            '## Coverage',
+            '',
+            "- Line coverage: $([math]::Round($lineRate, 2))%",
+            "- Branch coverage: $([math]::Round($branchRate, 2))%"
+          ) -join "`n"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
+
+      - name: Generate coverage badge
+        if: always() && hashFiles('coverage/coverage.xml') != ''
+        shell: pwsh
+        run: |
+          [xml]$coverage = Get-Content coverage\coverage.xml
+          $lineRate = [double]$coverage.coverage.'line-rate' * 100.0
+          $message = "$([math]::Round($lineRate, 2))%"
+          $badgeColor = if ($lineRate -ge 90.0) {
+            '#4c1'
+          } elseif ($lineRate -ge 80.0) {
+            '#97ca00'
+          } elseif ($lineRate -ge 70.0) {
+            '#dfb317'
+          } elseif ($lineRate -ge 60.0) {
+            '#fe7d37'
+          } else {
+            '#e05d44'
+          }
+          $label = 'coverage'
+          $labelWidth = 68
+          $messageWidth = [Math]::Max(45, ($message.Length * 7) + 10)
+          $totalWidth = $labelWidth + $messageWidth
+          $labelTextX = [Math]::Floor($labelWidth / 2)
+          $messageTextX = $labelWidth + [Math]::Floor($messageWidth / 2)
+          $svg = @"
+          <svg xmlns="http://www.w3.org/2000/svg"
+               width="$totalWidth" height="20" role="img"
+               aria-label="$label: $message">
+            <linearGradient id="smooth" x2="0" y2="100%">
+              <stop offset="0" stop-color="#fff" stop-opacity=".7"/>
+              <stop offset=".1" stop-color="#aaa" stop-opacity=".1"/>
+              <stop offset=".9" stop-opacity=".3"/>
+              <stop offset="1" stop-opacity=".5"/>
+            </linearGradient>
+            <clipPath id="round">
+              <rect width="$totalWidth" height="20" rx="3" fill="#fff"/>
+            </clipPath>
+            <g clip-path="url(#round)">
+              <rect width="$labelWidth" height="20" fill="#555"/>
+              <rect x="$labelWidth" width="$messageWidth" height="20"
+                    fill="$badgeColor"/>
+              <rect width="$totalWidth" height="20" fill="url(#smooth)"/>
+            </g>
+            <g fill="#fff" text-anchor="middle"
+                font-family="DejaVu Sans,Verdana,Geneva,sans-serif"
+                font-size="11">
+              <text x="$labelTextX" y="15" fill="#010101"
+                    fill-opacity=".3">$label</text>
+              <text x="$labelTextX" y="14">$label</text>
+              <text x="$messageTextX" y="15" fill="#010101"
+                    fill-opacity=".3">$message</text>
+              <text x="$messageTextX" y="14">$message</text>
+            </g>
+          </svg>
+          "@
+          Set-Content -Path coverage\coverage-badge.svg -Value $svg `
+            -NoNewline
+
+      - name: Configure GitHub Pages
+        if: >
+          github.event_name != 'pull_request' &&
+          github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+
+      - name: Upload coverage Pages artifact
+        if: >
+          github.event_name != 'pull_request' &&
+          github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: coverage
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-coverage
+          path: coverage
+          if-no-files-found: ignore
+
+  deploy-coverage:
+    if: >
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy coverage report to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
