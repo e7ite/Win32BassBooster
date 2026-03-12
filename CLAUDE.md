@@ -57,10 +57,17 @@ namespace {
 - Fill every comment line as close to column 80 as possible, breaking only at
   word boundaries. Do not leave a line short when the next word would still
   fit within 80 columns.
-- For non-obvious literal arguments (`0`, `nullptr`), add inline parameter
-  labels.
-- Skip parameter labels for obvious standard-library calls (for example,
-  `memset`, `memcpy`).
+- Add inline parameter-name labels (`/*param=*/`) whenever the argument's
+  role is not immediately obvious at the call site. This includes:
+  - Literal values (`0`, `nullptr`, `FALSE`) whose meaning depends on
+    position.
+  - Expressions that lose their semantic meaning after unpacking, such as
+    `LOWORD(lparam)` or `client_rect.right` passed as a width.
+  - Calls where multiple parameters share the same type, making it easy to
+    silently transpose arguments.
+- Skip parameter labels only when the argument's role is obvious from the
+  name or type alone (for example, `memset(buffer, 0, size)`, or a
+  single-parameter call like `DeleteObject(font)`).
 - For non-obvious logic that must be commented, include concrete failure modes
   or constraints specific to this codebase.
 - For `// NOLINT(...)` comments, warning suppressions, and unavoidable magic
@@ -117,6 +124,18 @@ hr = client->Initialize(mode, 0, 0, 0, format, nullptr);
 hr = client->Initialize(mode, /*stream_flags=*/0, /*hns_buffer=*/0,
                         /*hns_periodicity=*/0, format,
                         /*session_guid=*/nullptr);
+```
+
+```cpp
+// Bad: expressions lose their meaning after unpacking; reader must check
+// the signature to know which is width and which is height.
+UpdateLayout(hwnd, slider_hwnd_, LOWORD(lparam), HIWORD(lparam),
+             &header_rc_, &slider_label_rc_, &footer_rc_);
+
+// Good: labels make the mapping visible at the call site.
+UpdateLayout(hwnd, slider_hwnd_, /*width=*/LOWORD(lparam),
+             /*height=*/HIWORD(lparam), &header_rc_, &slider_label_rc_,
+             &footer_rc_);
 ```
 
 ```cpp
@@ -619,6 +638,25 @@ const ShelfParams params = {.gain_db = 12.0,
 const Wrapper w = {value};
 ```
 
+- When constructing a struct inline (as a function argument or return value
+  rather than in a variable declaration), always name the type explicitly.
+  Omitting the type forces the reader to look up the function signature to
+  know what is being constructed.
+
+```cpp
+// Bad: reader must check PaintWindow's signature to know the type.
+PaintWindow(hwnd, {.palette = palette_,
+                   .header_rc = header_rc_});
+
+// Good: type is visible at the call site.
+PaintWindow(hwnd, PaintContext{.palette = palette_,
+                               .header_rc = header_rc_});
+
+// Good: variable declaration already names the type on the left-hand side.
+const PaintContext ctx = {.palette = palette_,
+                          .header_rc = header_rc_};
+```
+
 ### Avoid brittle parameters
 - Prefer typed parameters over strings or raw integers for values that control
   behavior. Strings used as mode selectors fail silently on typos, case
@@ -639,6 +677,46 @@ void SetMode(Mode mode);
 // Also good for binary flags.
 void SetEnabled(bool enabled);
 ```
+
+- When a function has two or more adjacent parameters of the same type,
+  transposition is silent and hard to catch in review. Group related same-type
+  parameters into a named struct so callers use designated initializers and the
+  compiler catches transposition.
+
+```cpp
+// Bad: width and height are both int; swapping them compiles silently.
+void UpdateLayout(int width, int height);
+UpdateLayout(client_rect.right, client_rect.bottom);
+
+// Good: struct with named fields makes transposition a compile error.
+struct ClientSize {
+  int width;
+  int height;
+};
+void UpdateLayout(ClientSize client);
+UpdateLayout(ClientSize{.width = client_rect.right,
+                        .height = client_rect.bottom});
+```
+
+- The same applies to output parameters: when a function writes to multiple
+  pointers of the same type, return a struct by value instead.
+
+```cpp
+// Bad: three RECT* outputs are easily transposed.
+void ComputeLayout(RECT* header, RECT* body, RECT* footer);
+
+// Good: return a struct; fields are named and order does not matter.
+struct LayoutRegions {
+  RECT header;
+  RECT body;
+  RECT footer;
+};
+LayoutRegions ComputeLayout();
+```
+
+- Do not wrap parameters when the types already differ enough that the
+  compiler would catch a transposition, or when the function signature is
+  dictated by a platform callback (for example, `WNDPROC`).
 
 ### Strings and API boundaries
 - Prefer `std::string_view` and `std::wstring_view` for read-only inputs.
@@ -667,6 +745,31 @@ void OpenDevice(std::wstring_view endpoint_id) {
   const std::wstring endpoint_id_str(endpoint_id);
   ::OpenEndpoint(endpoint_id_str.c_str());
 }
+```
+
+### Using declarations
+- In `.cpp` files, add `using` declarations for repeatedly qualified names to
+  reduce noise. Place them after includes and before the anonymous namespace.
+- Do not add `using` declarations or `using namespace` directives in header
+  files; they leak into every translation unit that includes the header.
+
+```cpp
+// Bad in a .cpp file: repeated qualification adds visual noise.
+palette_ = theme_manager::BuildPalette();
+theme_manager::ApplyTitleBarTheme(hwnd_);
+
+// Good: using declarations at file scope in the .cpp.
+using theme_manager::ApplyTitleBarTheme;
+using theme_manager::BuildPalette;
+// ...
+palette_ = BuildPalette();
+ApplyTitleBarTheme(hwnd_);
+```
+
+```cpp
+// Bad in a header: leaks into every includer.
+using theme_manager::Palette;  // pollutes all translation units
+class MainWindow { ... };
 ```
 
 ### Commits
