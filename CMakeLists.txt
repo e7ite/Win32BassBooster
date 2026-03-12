@@ -26,8 +26,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Options
-option(BUILD_TESTS "Build unit tests" ON)
-option(BUILD_GUI   "Build Win32 GUI application" ON)
+option(BUILD_TESTS  "Build unit tests" ON)
+option(BUILD_GUI    "Build Win32 GUI application" ON)
+option(ENABLE_ASAN  "Enable AddressSanitizer (MSVC /fsanitize=address)" OFF)
 
 # -----------------------------------------------------------------------
 # Windows configuration
@@ -36,9 +37,16 @@ if(WIN32)
     add_compile_definitions(PLATFORM_WINDOWS UNICODE _UNICODE NOMINMAX)
     if(MSVC)
         add_compile_options(/W4 /WX /utf-8)
+        if(ENABLE_ASAN)
+            add_compile_options(/fsanitize=address)
+        endif()
         add_compile_definitions(_WIN32_WINNT=0x0A00)
     else()
         add_compile_options(-Wall -Wextra -Werror)
+        if(ENABLE_ASAN)
+            add_compile_options(-fsanitize=address)
+            add_link_options(-fsanitize=address)
+        endif()
     endif()
 else()
     set(BUILD_GUI OFF)

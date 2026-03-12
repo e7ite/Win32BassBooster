@@ -169,7 +169,7 @@ then:
 |   `-- app.rc                                # Manifest and version info
 |-- .github/
 |   `-- workflows/build.yml
-|       # CI: build + test on every push/PR
+|       # CI: release (clang-tidy) + debug (ASan, coverage)
 |-- .githooks/
 |   `-- pre-commit
 |       # Auto-formats staged files on commit
@@ -246,22 +246,28 @@ Do not land code built this way without running the normal checks again.
 
 ## CI and branch protection
 
-GitHub Actions builds and tests every push and pull request. The badge above
-reflects the current status of `main`. Each run also uploads a Windows coverage
-artifact and writes a short coverage summary into the Actions job output. Pushes
-to `main` publish the HTML report and coverage badge through GitHub Pages.
+GitHub Actions runs two parallel jobs on every push and pull request:
+
+- **release** -- builds with clang-tidy (`-warnings-as-errors=*`) and runs
+  tests in Release mode.
+- **debug** -- builds with AddressSanitizer (`/fsanitize=address`), runs tests
+  in Debug mode under OpenCppCoverage, and generates an HTML coverage report
+  and badge.
+
+The badge above reflects the current status of `main`. Pushes to `main` publish
+the HTML report and coverage badge through GitHub Pages.
 
 To prevent merging broken code, enable branch protection in the GitHub
 repository settings:
 
 1. **Settings -> Branches -> Add branch protection rule** for `main`
-2. Enable **Require status checks to pass before merging** and select the
-   `build` check
+2. Enable **Require status checks to pass before merging** and select both the
+   `release` and `debug` checks
 3. Enable **Require branches to be up to date before merging**
 4. Enable **Do not allow bypassing the above settings**
 
 With these rules in place, no PR can be merged and no direct push to `main` can
-succeed unless the CI build and all tests pass.
+succeed unless both CI jobs and all tests pass.
 
 ## How it works
 

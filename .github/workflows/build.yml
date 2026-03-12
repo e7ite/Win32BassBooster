@@ -6,10 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
-    outputs:
-      pages_enabled: ${{ steps.pages-state.outputs.enabled }}
 
     steps:
       - uses: actions/checkout@v4
@@ -17,16 +15,33 @@ jobs:
       - name: Install LLVM/clang-tidy
         run: choco install llvm --yes
 
-      - name: Install OpenCppCoverage
-        run: choco install opencppcoverage --yes
-
       - name: Configure
         run: >
           cmake -B build
           -DCMAKE_CXX_CLANG_TIDY="clang-tidy;-warnings-as-errors=*"
 
-      - name: Build (includes clang-tidy)
+      - name: Build
         run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  debug:
+    runs-on: windows-latest
+    outputs:
+      pages_enabled: ${{ steps.pages-state.outputs.enabled }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenCppCoverage
+        run: choco install opencppcoverage --yes
+
+      - name: Configure
+        run: cmake -B build -DENABLE_ASAN=ON -DENABLE_CLANG_TIDY=OFF
+
+      - name: Build
+        run: cmake --build build --config Debug
 
       - name: Test with coverage
         shell: pwsh
@@ -50,12 +65,12 @@ jobs:
           }
           $coverageArgs = @(
             '--sources', "$env:GITHUB_WORKSPACE\src",
-            '--modules', "$env:GITHUB_WORKSPACE\build\bin\Release",
+            '--modules', "$env:GITHUB_WORKSPACE\build\bin\Debug",
             '--cover_children',
             '--export_type', "cobertura:$coverageDir\coverage.xml",
             '--export_type', "html:$coverageDir\html",
             '--',
-            'ctest', '--test-dir', 'build', '-C', 'Release',
+            'ctest', '--test-dir', 'build', '-C', 'Debug',
             '--output-on-failure'
           )
           & $coverageExe @coverageArgs
@@ -189,8 +204,8 @@ jobs:
           if-no-files-found: ignore
 
   deploy-coverage:
-    if: needs.build.outputs.pages_enabled == 'true'
-    needs: build
+    if: needs.debug.outputs.pages_enabled == 'true'
+    needs: debug
     runs-on: ubuntu-latest
     permissions:
       pages: write
