@@ -43,6 +43,17 @@ jobs:
       - name: Build
         run: cmake --build build --config Debug
 
+      - name: Add ASan runtime to PATH
+        shell: pwsh
+        run: |
+          $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vsWhere -latest -property installationPath
+          $msvcDir = Get-ChildItem "$vsPath\VC\Tools\MSVC" -Directory |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+          $asanDir = "$($msvcDir.FullName)\bin\Hostx64\x64"
+          "$asanDir" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Test with coverage
         shell: pwsh
         run: |
