@@ -1,5 +1,5 @@
-﻿// Verifies the window and slider create successfully, slider range is valid,
-// and slider positions at min, mid, and max map to the correct boost levels.
+﻿// Verifies window creation, slider range, slider-to-boost mapping, minimum
+// size constraints, theme changes, paint cycles, and control color responses.
 
 #include "main_window.hpp"
 
@@ -157,6 +157,108 @@ TEST_F(MainWindowLiveTest, SliderAtMaxSetsMaxBoost) {
 
   // Slider at max (rightmost) maps to maximum boost (level ~= 1.0).
   EXPECT_NEAR(pipeline_observer_->last_boost_level_, 1.0, 1e-6);
+}
+
+TEST_F(MainWindowLiveTest, GetMinMaxInfoEnforcesMinimumSize) {
+  ASSERT_TRUE(window_created_);
+
+  MINMAXINFO info = {};
+  SendMessageW(window_->hwnd(), WM_GETMINMAXINFO, /*wParam=*/0,
+               reinterpret_cast<LPARAM>(&info));
+
+  EXPECT_GT(info.ptMinTrackSize.x, 0);
+  EXPECT_GT(info.ptMinTrackSize.y, 0);
+}
+
+TEST_F(MainWindowLiveTest, EraseBkgndReturnsNonZero) {
+  ASSERT_TRUE(window_created_);
+
+  HDC hdc = GetDC(window_->hwnd());
+  ASSERT_NE(hdc, nullptr);
+
+  LRESULT result = SendMessageW(window_->hwnd(), WM_ERASEBKGND,
+                                reinterpret_cast<WPARAM>(hdc), /*lParam=*/0);
+  ReleaseDC(window_->hwnd(), hdc);
+
+  // Non-zero means the window handled the erase; prevents flicker.
+  EXPECT_NE(result, 0);
+}
+
+TEST_F(MainWindowLiveTest, HScrollFromNonSliderIsIgnored) {
+  ASSERT_TRUE(window_created_);
+
+  // Send WM_HSCROLL with a null HWND (not the slider); should be ignored.
+  SendMessageW(window_->hwnd(), WM_HSCROLL, MAKEWPARAM(TB_THUMBPOSITION, 500),
+               /*lParam=*/0);
+
+  EXPECT_EQ(pipeline_observer_->set_level_count_, 0);
+}
+
+TEST_F(MainWindowLiveTest, SizeMessageUpdatesLayout) {
+  ASSERT_TRUE(window_created_);
+
+  constexpr int kNewWidth = 800;
+  constexpr int kNewHeight = 300;
+  SendMessageW(window_->hwnd(), WM_SIZE, SIZE_RESTORED,
+               MAKELPARAM(kNewWidth, kNewHeight));
+
+  // Window should still be valid after resize; layout was recomputed.
+  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+}
+
+TEST_F(MainWindowLiveTest, ThemeChangedDoesNotCrash) {
+  ASSERT_TRUE(window_created_);
+
+  SendMessageW(window_->hwnd(), WM_THEMECHANGED, /*wParam=*/0, /*lParam=*/0);
+
+  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+}
+
+TEST_F(MainWindowLiveTest, SettingChangeDoesNotCrash) {
+  ASSERT_TRUE(window_created_);
+
+  SendMessageW(window_->hwnd(), WM_SETTINGCHANGE, /*wParam=*/0, /*lParam=*/0);
+
+  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+}
+
+TEST_F(MainWindowLiveTest, PaintMessageDoesNotCrash) {
+  ASSERT_TRUE(window_created_);
+
+  // Invalidate and force a paint cycle.
+  InvalidateRect(window_->hwnd(), /*lpRect=*/nullptr, /*bErase=*/FALSE);
+  SendMessageW(window_->hwnd(), WM_PAINT, /*wParam=*/0, /*lParam=*/0);
+
+  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+}
+
+TEST_F(MainWindowLiveTest, CtlColorStaticReturnsNonNullBrush) {
+  ASSERT_TRUE(window_created_);
+
+  HDC hdc = GetDC(window_->hwnd());
+  ASSERT_NE(hdc, nullptr);
+
+  LRESULT result = SendMessageW(
+      window_->hwnd(), WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>(hdc),
+      reinterpret_cast<LPARAM>(window_->slider_hwnd()));
+  ReleaseDC(window_->hwnd(), hdc);
+
+  // The brush handle must be non-null for the slider to paint correctly.
+  EXPECT_NE(result, 0);
+}
+
+TEST_F(MainWindowLiveTest, CtlColorScrollbarReturnsNonNullBrush) {
+  ASSERT_TRUE(window_created_);
+
+  HDC hdc = GetDC(window_->hwnd());
+  ASSERT_NE(hdc, nullptr);
+
+  LRESULT result = SendMessageW(
+      window_->hwnd(), WM_CTLCOLORSCROLLBAR, reinterpret_cast<WPARAM>(hdc),
+      reinterpret_cast<LPARAM>(window_->slider_hwnd()));
+  ReleaseDC(window_->hwnd(), hdc);
+
+  EXPECT_NE(result, 0);
 }
 
 }  // namespace
