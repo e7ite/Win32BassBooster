@@ -69,7 +69,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/,
     return 1;
   }
 
-  const int ret = MainWindow::Run();
+  const int ret = wnd.Run();
   CoUninitialize();
   return ret;
 }

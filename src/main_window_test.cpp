@@ -14,7 +14,7 @@
 
 namespace {
 
-class TestAudioPipeline : public AudioPipelineInterface {
+class MockAudioPipeline : public AudioPipelineInterface {
  public:
   [[nodiscard]] AudioPipelineInterface::Status Start() override { return {}; }
   void Stop() override {}
@@ -51,7 +51,7 @@ void DrainPendingMessages() {
 class MainWindowLiveTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    auto audio_pipeline = std::make_unique<TestAudioPipeline>();
+    auto audio_pipeline = std::make_unique<MockAudioPipeline>();
     pipeline_observer_ = audio_pipeline.get();
     window_ = std::make_unique<MainWindow>(std::move(audio_pipeline));
     window_created_ =
@@ -71,7 +71,7 @@ class MainWindowLiveTest : public ::testing::Test {
   }
 
   std::unique_ptr<MainWindow> window_;
-  TestAudioPipeline* pipeline_observer_ = nullptr;
+  MockAudioPipeline* pipeline_observer_ = nullptr;
   bool window_created_ = false;
 };
 
