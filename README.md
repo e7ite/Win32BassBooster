@@ -8,9 +8,9 @@ A simple, system-wide bass boost application for Windows.
 
 # How to use
 
-If you just want to use the app, download the latest packaged build from
-[Releases][github-releases], extract the archive, and run
-`Win32BassBooster.exe`.
+If you just want to use the app, download the latest
+`Win32BassBooster.exe` from [Releases][github-releases] and run it. No
+archive extraction is required.
 
 Then drag the slider to choose how much bass boost you want. The window footer
 shows the current default render device name when startup succeeds.
@@ -21,9 +21,8 @@ shows the current default render device name when startup succeeds.
 
 - **Windows 10 or later**
 - **Visual Studio 2022** (Community, Professional, or Enterprise) with the
-  **Desktop development with C++** workload, or the free
-  [Build Tools for Visual Studio 2022][vs2022-build-tools] with the same
-  workload selected
+  **Desktop development with C++** workload, or the free [Build Tools for Visual
+  Studio 2022][vs2022-build-tools] with the same workload selected
 - **CMake 3.16+** -- included with Visual Studio 2022 and also available
   standalone from [cmake.org][cmake-download]
 
@@ -99,8 +98,8 @@ via **Ctrl+Shift+P -> CMake: Select Configure Preset**, choose:
 Visual Studio 2022 x64
 ```
 
-This selects the Visual Studio 2022 generator with x64 architecture and
-enables both the GUI and test targets.
+This selects the Visual Studio 2022 generator with x64 architecture and enables
+both the GUI and test targets.
 
 ### Select a build preset
 
@@ -131,8 +130,8 @@ Then reopen the folder or run **Ctrl+Shift+P -> CMake: Configure**.
 
 ### Run the tests
 
-Open the **Testing** panel (beaker icon in the Activity Bar) to run and
-inspect individual tests, or run all tests at once:
+Open the **Testing** panel (beaker icon in the Activity Bar) to run and inspect
+individual tests, or run all tests at once:
 
 ```text
 Ctrl+Shift+P -> CMake: Run Tests
@@ -140,8 +139,8 @@ Ctrl+Shift+P -> CMake: Run Tests
 
 ### Run or debug the application
 
-Use the status bar **launch target** selector to pick
-**Win32BassBooster**, then:
+Use the status bar **launch target** selector to pick **Win32BassBooster**,
+then:
 
 - **Ctrl+Shift+P -> CMake: Run Without Debugging** -- launch the built exe
 - **Ctrl+Shift+P -> CMake: Debug** -- launch under the debugger with
@@ -153,26 +152,34 @@ Use the status bar **launch target** selector to pick
 .
 |-- src/
 |   |-- bass_boost_filter.hpp/.cpp            # Biquad low-shelf bass boost
-|   |-- endpoint_audio_format.hpp/.cpp        # Endpoint PCM decode to stereo float
+|   |-- endpoint_audio_format.hpp/.cpp
+|   |   # Endpoint PCM decode to stereo float
 |   |-- audio_pipeline_interface.hpp          # Abstract audio pipeline contract
-|   |-- loopback_capture_activation.hpp/.cpp  # Process-loopback capture activation
-|   |-- audio_pipeline.hpp/.cpp               # Startup, recovery, and bass-delta render path
-|   |-- theme_manager.hpp/.cpp                # Dark/light palette + title bar theming
-|   |-- main_window.hpp/.cpp                  # Themed Win32 window and slider UI
+|   |-- loopback_capture_activation.hpp/.cpp
+|   |   # Process-loopback capture activation
+|   |-- audio_pipeline.hpp/.cpp
+|   |   # Startup, recovery, and bass-delta render path
+|   |-- theme_manager.hpp/.cpp
+|   |   # Dark/light palette + title bar theming
+|   |-- main_window.hpp/.cpp
+|   |   # Themed Win32 window and slider UI
 |   |-- main.cpp                              # Entry point
 |   `-- *_test.cpp                            # Unit tests (one per module)
 |-- resources/
 |   `-- app.rc                                # Manifest and version info
 |-- .github/
-|   `-- workflows/build.yml                   # CI: build + test on every push/PR
+|   `-- workflows/build.yml
+|       # CI: build + test on every push/PR
 |-- .githooks/
-|   `-- pre-commit                            # Auto-formats staged files on commit
+|   `-- pre-commit
+|       # Auto-formats staged files on commit
 |-- .clang-format                             # Code style configuration
 |-- .clang-tidy                               # Static analysis configuration
 |-- bass-booster-architecture.svg             # README high-level system diagram
 |-- bass-booster-screenshot.png               # README application screenshot
 |-- CMakePresets.json                         # Configure/build/test presets
-|-- LICENSE                                   # License terms for this repository
+|-- LICENSE
+|   # License terms for this repository
 `-- CMakeLists.txt
 ```
 
@@ -180,12 +187,14 @@ Use the status bar **launch target** selector to pick
 
 The project uses two LLVM tools to keep code clean:
 
-| Tool | Role |
-|---|---|
-| `clang-format` | Auto-formats sources to Google C++ style (see `.clang-format` at project root) |
-| `clang-tidy` | Static analysis at build time (see `.clang-tidy` at project root) |
+- `clang-format` -- auto-formats sources to Google C++ style; see
+  `.clang-format` at the project root.
+- `clang-tidy` -- static analysis at build time; see `.clang-tidy` at the
+  project root.
 
-[`CLAUDE.md`](CLAUDE.md) contains additional local code style and workflow overrides specific to this repository. Refer to it for repo-specific formatting and contribution rules.
+[`CLAUDE.md`](CLAUDE.md) contains additional local code style and workflow
+overrides specific to this repository. Refer to it for repo-specific formatting
+and contribution rules.
 
 Both tools are expected for normal contributions. CMake prints a warning during
 configure if either tool is missing, and CI enforces them on push and pull
@@ -216,7 +225,8 @@ automatically. After that, every `git commit` auto-formats staged `.cpp` and
 `.hpp` files with `clang-format` before the commit is recorded.
 
 If `clang-format` is not on `PATH`, the hook prints a warning and proceeds, so
-you can still commit locally, but this may result in CI failures due to formatting issues, requiring additional commits to fix style problems.
+you can still commit locally, but this may result in CI failures due to
+formatting issues and require additional commits to fix style problems.
 
 ### Formatting all sources manually
 
@@ -248,8 +258,8 @@ repository settings:
 3. Enable **Require branches to be up to date before merging**
 4. Enable **Do not allow bypassing the above settings**
 
-With these rules in place, no PR can be merged and no direct push to `main`
-can succeed unless the CI build and all tests pass.
+With these rules in place, no PR can be merged and no direct push to `main` can
+succeed unless the CI build and all tests pass.
 
 ## How it works
 
@@ -259,14 +269,14 @@ can succeed unless the CI build and all tests pass.
 
 The pipeline finds the current default render endpoint -- Windows' name for
 whichever speakers or headphones are currently selected as the output device.
-[`audio_pipeline.cpp`](src/audio_pipeline.cpp) opens the endpoint in shared
-mode (meaning other apps can keep using the same device at the same time) and
-asks Windows for the device's mix format -- the sample rate, bit depth, and
+[`audio_pipeline.cpp`](src/audio_pipeline.cpp) opens the endpoint in shared mode
+(meaning other apps can keep using the same device at the same time) and asks
+Windows for the device's mix format -- the sample rate, bit depth, and
 channel layout the device is already using. The app requires that format to be
 float32 stereo (two channels of 32-bit floating-point samples stored
 back-to-back). Float32 is the simplest format to do math on because the samples
-are already ordinary decimal numbers (like 0.5 or -0.3) rather than raw
-integers that need scaling, and stereo (left + right) is what virtually all
+are already ordinary decimal numbers (like 0.5 or -0.3) rather than raw integers
+that need scaling, and stereo (left + right) is what virtually all desktop
 desktop speakers and headphones use.
 
 ### Step 2 -- Create audio paths
@@ -303,18 +313,18 @@ reproduce).
 Each captured packet goes through these stages:
 
 1. [`endpoint_audio_format`](src/endpoint_audio_format.cpp) decodes the
-   endpoint packet to interleaved stereo float samples -- left and right
-   channel values stored in alternating order (`L, R, L, R, ...`), where each
-   value is a decimal number (like 0.5 or -0.3) representing the air pressure
-   at that instant.
+   endpoint packet to interleaved stereo float samples -- left and right channel
+   values stored in alternating order (`L, R, L, R, ...`), where each value is a
+   decimal number (like 0.5 or -0.3) representing the air pressure at that
+   instant.
 2. [`bass_boost_filter`](src/bass_boost_filter.cpp) applies a low-shelf biquad
    filter. A shelf filter raises or lowers everything below a chosen frequency
    (here, 100 Hz) by a fixed amount, while leaving higher frequencies mostly
    unchanged -- think of it as a volume knob that only affects the bass. "Low-
    shelf" means the boost applies to the low end. 100 Hz is where the filter
-   transitions from boosted to unboosted; frequencies well below 100 Hz get
-   the full boost, frequencies well above are untouched, and frequencies near
-   100 Hz see a gradual rolloff.
+   transitions from boosted to unboosted; frequencies well below 100 Hz get the
+   full boost, frequencies well above are untouched, and frequencies near 100 Hz
+   see a gradual rolloff.
 
 A biquad is a second-order IIR (infinite impulse response) filter derived here
 from the [Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/) low-shelf
@@ -327,12 +337,12 @@ y[n] = b0 * x[n] + b1 * x[n - 1] + b2 * x[n - 2]
                   - a1 * y[n - 1] - a2 * y[n - 2]
 ```
 
-Five coefficients (`b0`, `b1`, `b2`, `a1`, `a2`) describe the filter. The
-filter also stores the last two input and output values for each channel (left
-and right). These stored values let the filter "remember" where it left off, so
-when Windows hands the app a new packet of audio the filter continues smoothly
-from the previous packet. Without them, each packet would start from silence
-and you would hear a click or pop at every packet boundary.
+Five coefficients (`b0`, `b1`, `b2`, `a1`, `a2`) describe the filter. The filter
+also stores the last two input and output values for each channel (left and
+right). These stored values let the filter "remember" where it left off, so when
+Windows hands the app a new packet of audio the filter continues smoothly
+from the previous packet. Without them, each packet would start from silence and
+you would hear a click or pop at every packet boundary.
 
 All frequencies below 100 Hz are boosted by the chosen gain (measured in
 decibels -- a logarithmic loudness scale where +6 dB roughly doubles the
@@ -341,9 +351,8 @@ The filter uses a Butterworth Q of 0.707, which produces the flattest possible
 response in the boosted region -- no peaks or dips, just a smooth level
 increase.
 
-**Slider mapping.** The slider in
-[`main_window.cpp`](src/main_window.cpp) maps position `p` in `[0, 1]` to gain
-via a square-root curve:
+**Slider mapping.** The slider in [`main_window.cpp`](src/main_window.cpp) maps
+position `p` in `[0, 1]` to gain via a square-root curve:
 
 ```cpp
 gain_db = kMaxGainDb * sqrt(p);  // p=0 -> 0 dB, p=1 -> 18 dB
@@ -356,20 +365,20 @@ change near the end.
 
 `SetBoostLevel` is called from the UI thread while the audio thread is running.
 The user-controlled DSP parameters are stored in atomics, so the audio thread
-can read them without taking locks on the hot path (the time-critical inner
-loop that processes every audio sample).
+can read them without taking locks on the hot path (the time-critical inner loop
+that processes every audio sample).
 
 ### Step 5 -- Play added bass
 
 [`audio_pipeline.cpp`](src/audio_pipeline.cpp) subtracts the original samples
-from the filtered samples and renders only the difference
-(`filter(signal) - signal`) through the output path. Because the low-shelf
-filter leaves mids and highs close to the original signal, the difference
+from the filtered samples and renders only the difference (`filter(signal) -
+signal`) through the output path. Because the low-shelf filter leaves mids and
+highs close to the original signal, the difference
 contains only the extra bass energy the filter introduced.
 
-If the app played the full filtered signal instead -- which already contains
-the original mids, highs, and everything else -- you would hear a second,
-slightly delayed copy of all system audio layered on top of the original. That
+If the app played the full filtered signal instead -- which already contains the
+original mids, highs, and everything else -- you would hear a second, slightly
+delayed copy of all system audio layered on top of the original. That
 delay causes comb filtering: certain frequencies cancel out and others
 reinforce, producing a hollow, metallic sound (like talking into a tube). By
 rendering only the difference, the app adds bass without replaying a duplicate
@@ -390,13 +399,13 @@ admin privileges, and a bug can only crash the app itself -- not the OS.
 **Doesn't playing bass through the output path mean you hear it twice -- once
 from the original audio and again from the app?**
 
-No. The original audio is already playing through the speakers from whatever
-app produced it (a music player, a game, etc.). Step 5 renders only the
-*difference* between the filtered signal and the original -- that is, only the
+No. The original audio is already playing through the speakers from whatever app
+produced it (a music player, a game, etc.). Step 5 renders only the *difference*
+between the filtered signal and the original -- that is, only the
 extra bass energy the shelf filter added. The mids, highs, and original bass
 level are subtracted out, so the output path carries just the added boost.
-You hear the original audio once (from the source app) plus the extra bass
-(from this app), not two copies of everything.
+You hear the original audio once (from the source app) plus the extra bass (from
+this app), not two copies of everything.
 
 ## License
 
