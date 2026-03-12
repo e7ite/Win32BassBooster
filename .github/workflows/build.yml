@@ -50,6 +50,7 @@ jobs:
           }
           $coverageArgs = @(
             '--sources', "$env:GITHUB_WORKSPACE\src",
+            '--modules', "$env:GITHUB_WORKSPACE\build\bin\Release",
             '--cover_children',
             '--export_type', "cobertura:$coverageDir\coverage.xml",
             '--export_type', "html:$coverageDir\html",
