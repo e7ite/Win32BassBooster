@@ -7,8 +7,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include <memory>
-
 #include "audio_pipeline_interface.hpp"
 #include "theme_manager.hpp"
 
@@ -22,18 +20,14 @@ struct LayoutRegions {
 
 class MainWindow {
  public:
-  // Accepts a pre-built pipeline so tests can run without a real audio device.
-  explicit MainWindow(std::unique_ptr<AudioPipelineInterface> engine);
-  ~MainWindow();
+  // Does not take ownership; the pipeline must outlive the window.
+  explicit MainWindow(AudioPipelineInterface* audio);
 
   MainWindow(const MainWindow&) = delete;
   MainWindow& operator=(const MainWindow&) = delete;
 
   // Creates and shows the window. Returns false if Win32 window creation fails.
   [[nodiscard]] bool Create(HINSTANCE instance, int cmd_show);
-
-  // Runs the Win32 message loop until `WM_QUIT`. Returns the process exit code.
-  [[nodiscard]] int Run();
 
   // Dispatches instance-specific window messages. Public so the free-function
   // `WNDPROC` callback in `main_window.cpp` can call it after looking up the
@@ -52,9 +46,8 @@ class MainWindow {
   // Module instance used when creating child windows and loading resources.
   HINSTANCE instance_ = nullptr;
 
-  // Owned pipeline injected at construction; may be a real device or a test
-  // stub.
-  std::unique_ptr<AudioPipelineInterface> audio_;
+  // Borrowed; owned by the caller. Must outlive the window.
+  AudioPipelineInterface* audio_ = nullptr;
   // Rebuilt on every `WM_THEMECHANGED`/`WM_SETTINGCHANGE` so colors track the
   // system dark/light mode setting in real time.
   theme_manager::Palette palette_ = {};

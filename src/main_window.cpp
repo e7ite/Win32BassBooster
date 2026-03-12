@@ -383,14 +383,7 @@ LRESULT CALLBACK DispatchWindowMessage(HWND hwnd, UINT msg, WPARAM wparam,
 
 }  // namespace
 
-MainWindow::MainWindow(std::unique_ptr<AudioPipelineInterface> engine)
-    : audio_(std::move(engine)) {}
-
-MainWindow::~MainWindow() {
-  if (audio_ != nullptr) {
-    audio_->Stop();
-  }
-}
+MainWindow::MainWindow(AudioPipelineInterface* audio) : audio_(audio) {}
 
 bool MainWindow::Create(HINSTANCE instance, int cmd_show) {
   constexpr const wchar_t* kClassName = L"BassBoosterMain";
@@ -419,16 +412,6 @@ bool MainWindow::Create(HINSTANCE instance, int cmd_show) {
   ShowWindow(hwnd_, cmd_show);
   UpdateWindow(hwnd_);
   return true;
-}
-
-int MainWindow::Run() {
-  MSG msg = {};
-  while (GetMessageW(&msg, /*hWnd=*/nullptr, /*wMsgFilterMin=*/0,
-                     /*wMsgFilterMax=*/0) > 0) {
-    TranslateMessage(&msg);
-    DispatchMessageW(&msg);
-  }
-  return static_cast<int>(msg.wParam);
 }
 
 LRESULT MainWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wparam,
@@ -462,9 +445,9 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wparam,
       return 0;
     }
     case WM_PAINT:
-      PaintWindow(hwnd, PaintContext{.palette = palette_,
-                                     .layout = layout_,
-                                     .audio = audio_.get()});
+      PaintWindow(hwnd,
+                  PaintContext{
+                      .palette = palette_, .layout = layout_, .audio = audio_});
       return 0;
     case WM_ERASEBKGND:
       // Return 1 to tell Windows we handled the erase; the actual background
@@ -496,7 +479,7 @@ LRESULT MainWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wparam,
       return OnCtlColor(
           reinterpret_cast<HDC>(wparam),
           PaintContext{
-              .palette = palette_, .layout = layout_, .audio = audio_.get()});
+              .palette = palette_, .layout = layout_, .audio = audio_});
     case WM_DESTROY:
       if (audio_ != nullptr) {
         audio_->Stop();

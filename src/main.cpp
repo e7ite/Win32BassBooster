@@ -62,14 +62,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/,
     return 1;
   }
 
-  MainWindow wnd(std::move(audio_pipeline));
+  MainWindow wnd(audio_pipeline.get());
   if (!wnd.Create(hInstance, nShowCmd)) {
     ShowFatalError(L"Failed to create main window.");
     CoUninitialize();
     return 1;
   }
 
-  const int ret = wnd.Run();
+  MSG msg = {};
+  while (GetMessageW(&msg, /*hWnd=*/nullptr, /*wMsgFilterMin=*/0,
+                     /*wMsgFilterMax=*/0) > 0) {
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+  }
+
   CoUninitialize();
-  return ret;
+  return static_cast<int>(msg.wParam);
 }

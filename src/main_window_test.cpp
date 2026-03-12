@@ -51,9 +51,9 @@ void DrainPendingMessages() {
 class MainWindowLiveTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    auto audio_pipeline = std::make_unique<MockAudioPipeline>();
-    pipeline_observer_ = audio_pipeline.get();
-    window_ = std::make_unique<MainWindow>(std::move(audio_pipeline));
+    pipeline_ = std::make_unique<MockAudioPipeline>();
+    pipeline_observer_ = pipeline_.get();
+    window_ = std::make_unique<MainWindow>(pipeline_.get());
     window_created_ =
         window_->Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE);
   }
@@ -70,6 +70,7 @@ class MainWindowLiveTest : public ::testing::Test {
     DrainPendingMessages();
   }
 
+  std::unique_ptr<MockAudioPipeline> pipeline_;
   std::unique_ptr<MainWindow> window_;
   MockAudioPipeline* pipeline_observer_ = nullptr;
   bool window_created_ = false;
