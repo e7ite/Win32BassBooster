@@ -32,8 +32,18 @@ jobs:
           $coverageDir = Join-Path $env:GITHUB_WORKSPACE coverage
           New-Item -ItemType Directory -Path $coverageDir -Force | Out-Null
 
-          $coverageExe =
-            (Get-Command OpenCppCoverage.exe -ErrorAction Stop).Source
+          $coverageExeCandidates = @(
+            (Join-Path $env:ProgramFiles
+              'OpenCppCoverage\OpenCppCoverage.exe'),
+            (Join-Path ${env:ProgramFiles(x86)}
+              'OpenCppCoverage\OpenCppCoverage.exe')
+          )
+          $coverageExe = $coverageExeCandidates |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+          if (-not $coverageExe) {
+            throw 'OpenCppCoverage.exe was not found after installation.'
+          }
           $coverageArgs = @(
             '--sources', "$env:GITHUB_WORKSPACE\src",
             '--cover_children',
