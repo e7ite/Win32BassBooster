@@ -32,11 +32,13 @@ jobs:
           $coverageDir = Join-Path $env:GITHUB_WORKSPACE coverage
           New-Item -ItemType Directory -Path $coverageDir -Force | Out-Null
 
+          $programFilesCoverageDir = "$env:ProgramFiles\OpenCppCoverage"
+          $programFilesX86Root = ${env:ProgramFiles(x86)}
+          $programFilesX86CoverageDir =
+            "$programFilesX86Root\OpenCppCoverage"
           $coverageExeCandidates = @(
-            (Join-Path $env:ProgramFiles
-              'OpenCppCoverage\OpenCppCoverage.exe'),
-            (Join-Path ${env:ProgramFiles(x86)}
-              'OpenCppCoverage\OpenCppCoverage.exe')
+            (Join-Path $programFilesCoverageDir 'OpenCppCoverage.exe'),
+            (Join-Path $programFilesX86CoverageDir 'OpenCppCoverage.exe')
           )
           $coverageExe = $coverageExeCandidates |
             Where-Object { Test-Path $_ } |
