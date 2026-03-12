@@ -783,7 +783,9 @@ class MainWindow { ... };
   - Main alternatives considered and why they were not chosen.
   - When the change modifies existing behavior or structure, state the before
     and after so the reviewer can understand the delta without reading the
-    diff.
+    diff. Omit before/after when the change is simple enough that the diff
+    already communicates the delta (for example, a one-line wording fix or a
+    search-and-replace rename).
 
 ```text
 Good commit sequence:

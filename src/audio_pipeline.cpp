@@ -180,7 +180,7 @@ struct CapturedPacket {
 
   const std::vector<float> original(buf.samples.begin(), buf.samples.end());
 
-  // Apply only the filter — no output attenuation. Process loopback prevents
+  // Apply only the filter -- no output attenuation. Process loopback prevents
   // feedback, so attenuation is unnecessary. The delta below isolates just the
   // bass energy the shelf added.
   filter.ProcessStereo(buf.samples);
