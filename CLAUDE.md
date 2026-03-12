@@ -366,6 +366,38 @@ right = handle(right_input);
   explicit inputs and outputs before adding new member functions.
 - Keep extracted helpers explicit: prefer clear inputs and outputs over hidden
   shared state.
+- When clang-tidy warns that a member function could be made `static`
+  (`readability-convert-member-functions-to-static`), do not add `static`.
+  Instead, remove the function from the class entirely. If the body is short
+  and has only one caller, inline it at the call site. Otherwise extract it
+  as a free function: anonymous-namespace helper if used only within the
+  `.cpp`, or a declared free function in the header if called from other
+  translation units.
+
+```cpp
+// Bad: clang-tidy suggests making Run() static; adding static keeps it in
+// the class without reason.
+class MainWindow {
+ public:
+  static int Run();  // does not use any member state.
+};
+
+// Good: short body with one caller -- inline at the call site.
+int WINAPI wWinMain(...) {
+  ...
+  MSG msg = {};
+  while (GetMessageW(&msg, ...) > 0) {
+    TranslateMessage(&msg);
+    DispatchMessageW(&msg);
+  }
+  return static_cast<int>(msg.wParam);
+}
+
+// Good: longer body or multiple callers -- anonymous-namespace helper.
+namespace {
+FormatInfo BuildFormatInfo(const WAVEFORMATEX& fmt) { ... }
+}  // namespace
+```
 
 ```cpp
 // Bad: `RefreshCoefficients` is public but only `SetLevelDb` calls it.
@@ -600,6 +632,36 @@ if (const Status setup_status = BuildSetup(setup); !setup_status.ok()) {
 }
 audio_client_ = std::move(setup.audio_client);
 format_ = std::move(setup.format);
+```
+
+- Use ownership (`std::unique_ptr`) for composition, where the owned object
+  is a part of the owner. Use non-owning pointers for collaboration, where
+  two independent components communicate but neither is a part of the other.
+  If a class only calls methods on a dependency without controlling when it
+  is created or destroyed, that is collaboration, not composition.
+
+```cpp
+// Bad: MainWindow takes ownership of the pipeline, implying the pipeline
+// is a part of the window. But they are independent concerns -- the window
+// just forwards UI events.
+class MainWindow {
+ public:
+  explicit MainWindow(std::unique_ptr<AudioPipelineInterface> audio);
+
+ private:
+  std::unique_ptr<AudioPipelineInterface> audio_;
+};
+
+// Good: non-owning pointer expresses collaboration. The caller owns the
+// pipeline and controls its lifetime.
+class MainWindow {
+ public:
+  // Does not take ownership; the pipeline must outlive the window.
+  explicit MainWindow(AudioPipelineInterface* audio);
+
+ private:
+  AudioPipelineInterface* audio_ = nullptr;  // borrowed
+};
 ```
 
 ### Sentinel values
