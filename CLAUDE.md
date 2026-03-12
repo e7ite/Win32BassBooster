@@ -345,7 +345,9 @@ left = handle(left_input);
 right = handle(right_input);
 ```
 
-### Refactoring behavior
+### Code structure and refactoring
+- These rules apply to both new code and refactors unless a rule says
+  otherwise.
 - Never leave dead code in the codebase. Remove unreachable functions,
   unused variables, stale flags, obsolete branches, and any code that is
   defined but never called. Do this in the same change that makes it dead,
@@ -366,6 +368,19 @@ right = handle(right_input);
   explicit inputs and outputs before adding new member functions.
 - Keep extracted helpers explicit: prefer clear inputs and outputs over hidden
   shared state.
+- In production code, prefer a single source of truth for behavior, mapping,
+  and policy. When the same logic must stay in sync across multiple live code
+  paths, extract shared code or shared data instead of copying it.
+- Do not introduce indirection only to satisfy DRY when the shared form is
+  harder to read than the repeated code. Keep the existing test guidance:
+  small repeated setup in tests is acceptable when it keeps the scenario clear.
+- When several local rules or heuristics pull in different directions, prefer
+  the smallest refactor that satisfies all of them together.
+- Do not apply one heuristic mechanically when it would create a worse
+  violation of other readability or maintainability rules, such as function
+  length, nesting depth, explicit data flow, or scanability.
+- If no reasonable local refactor can satisfy the competing rules, stop and
+  ask before choosing which rule to violate.
 - When clang-tidy warns that a member function could be made `static`
   (`readability-convert-member-functions-to-static`), do not add `static`.
   Instead, remove the function from the class entirely. If the body is short
@@ -397,6 +412,82 @@ int WINAPI wWinMain(...) {
 namespace {
 FormatInfo BuildFormatInfo(const WAVEFORMATEX& fmt) { ... }
 }  // namespace
+```
+
+```cpp
+// Bad: clamp policy duplicated across production paths; a future range change
+// can update one copy and forget the other.
+void SetBassBoostDb(double gain_db) {
+  if (gain_db < 0.0) {
+    gain_db = 0.0;
+  }
+  if (gain_db > kMaxGainDb) {
+    gain_db = kMaxGainDb;
+  }
+  bass_boost_db_ = gain_db;
+}
+
+void SetSavedBassBoostDb(double gain_db) {
+  if (gain_db < 0.0) {
+    gain_db = 0.0;
+  }
+  if (gain_db > kMaxGainDb) {
+    gain_db = kMaxGainDb;
+  }
+  saved_bass_boost_db_ = gain_db;
+}
+
+// Good: shared helper keeps the policy in one place with explicit inputs and
+// outputs.
+namespace {
+double ClampBassBoostDb(double gain_db) {
+  return std::clamp(gain_db, 0.0, kMaxGainDb);
+}
+}  // namespace
+
+void SetBassBoostDb(double gain_db) {
+  bass_boost_db_ = ClampBassBoostDb(gain_db);
+}
+
+void SetSavedBassBoostDb(double gain_db) {
+  saved_bass_boost_db_ = ClampBassBoostDb(gain_db);
+}
+```
+
+```cpp
+// Bad: mechanically following the "inline short single-caller bodies" rule
+// makes the caller longer, adds nesting, and makes the control flow harder to
+// scan.
+void StartRenderLoop() {
+  ...
+  if (needs_reset) {
+    ...
+    if (should_commit) {
+      ...
+    }
+  }
+  ...
+  // Inlined from BuildRenderSetup().
+  if (format == nullptr) {
+    return;
+  }
+  ...
+}
+
+// Good: satisfy the competing rules together by keeping the caller short and
+// extracting explicit helper logic.
+namespace {
+RenderSetup BuildRenderSetup(const DeviceState& state,
+                             const WAVEFORMATEX* format) {
+  ...
+}
+}  // namespace
+
+void StartRenderLoop() {
+  ...
+  const RenderSetup render_setup = BuildRenderSetup(state, format);
+  ...
+}
 ```
 
 ```cpp
