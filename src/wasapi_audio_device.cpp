@@ -13,6 +13,7 @@
 #include <mmdeviceapi.h>
 
 #include "endpoint_audio_format.hpp"
+#include "loopback_capture_activation.hpp"
 
 namespace {
 
@@ -62,6 +63,44 @@ using ScopedWaveFormat =
         render_service, L"GetService IAudioRenderClient failed");
   }
   return AudioPipelineInterface::Status::Ok();
+}
+
+[[nodiscard]] AudioPipelineInterface::Status InitializeCaptureClient(
+    IAudioClient& audio_client, WAVEFORMATEX* capture_format) {
+  if (const HRESULT initialize_capture = audio_client.Initialize(
+          AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
+          /*hnsBufferDuration=*/0,
+          /*hnsPeriodicity=*/0, capture_format,
+          /*audioSessionGuid=*/nullptr);
+      FAILED(initialize_capture)) {
+    return AudioPipelineInterface::Status::Error(
+        initialize_capture, L"IAudioClient::Initialize (loopback) failed");
+  }
+  return AudioPipelineInterface::Status::Ok();
+}
+
+[[nodiscard]] AudioPipelineInterface::Status AcquireCaptureClientService(
+    IAudioClient& audio_client,
+    IAudioCaptureClient*& raw_audio_capture_client) {
+  if (const HRESULT capture_service = audio_client.GetService(
+          __uuidof(IAudioCaptureClient),
+          reinterpret_cast<void**>(&raw_audio_capture_client));
+      FAILED(capture_service)) {
+    return AudioPipelineInterface::Status::Error(
+        capture_service, L"GetService IAudioCaptureClient failed");
+  }
+  return AudioPipelineInterface::Status::Ok();
+}
+
+[[nodiscard]] AudioPipelineInterface::Status InitializeCaptureStream(
+    IAudioClient& audio_client, WAVEFORMATEX* capture_format,
+    IAudioCaptureClient*& raw_audio_capture_client) {
+  if (const AudioPipelineInterface::Status capture_init =
+          InitializeCaptureClient(audio_client, capture_format);
+      !capture_init.ok()) {
+    return capture_init;
+  }
+  return AcquireCaptureClientService(audio_client, raw_audio_capture_client);
 }
 
 void ReadEndpointName(IMMDevice* render_device, std::wstring& endpoint_name) {
@@ -132,6 +171,11 @@ struct RenderClientSetup {
   ScopedWaveFormat format;
 };
 
+struct CaptureClientSetup {
+  ScopedComPtr<IAudioClient> audio_client;
+  ScopedComPtr<IAudioCaptureClient> service;
+};
+
 [[nodiscard]] AudioPipelineInterface::Status SetupRenderClient(
     IMMDevice& render_device, RenderClientSetup& setup) {
   IAudioClient* raw_render = nullptr;
@@ -172,6 +216,47 @@ struct RenderClientSetup {
     return render_service;
   }
   setup.service.reset(raw_audio_render_client);
+  return AudioPipelineInterface::Status::Ok();
+}
+
+[[nodiscard]] AudioPipelineInterface::Status SetupCaptureClient(
+    WAVEFORMATEX* render_format, CaptureClientSetup& setup) {
+  IAudioClient* raw_capture = nullptr;
+  if (const AudioPipelineInterface::Status activate =
+          ActivateLoopbackCaptureClient(raw_capture);
+      !activate.ok()) {
+    return activate;
+  }
+  setup.audio_client.reset(raw_capture);
+
+  IAudioCaptureClient* raw_client = nullptr;
+  if (const AudioPipelineInterface::Status capture_stream =
+          InitializeCaptureStream(*setup.audio_client, render_format,
+                                  raw_client);
+      !capture_stream.ok()) {
+    return capture_stream;
+  }
+  setup.service.reset(raw_client);
+  return AudioPipelineInterface::Status::Ok();
+}
+
+struct StreamClientSetup {
+  CaptureClientSetup capture;
+  RenderClientSetup render;
+};
+
+[[nodiscard]] AudioPipelineInterface::Status SetupStreamClients(
+    IMMDevice& render_device, StreamClientSetup& clients) {
+  if (const AudioPipelineInterface::Status render =
+          SetupRenderClient(render_device, clients.render);
+      !render.ok()) {
+    return render;
+  }
+  if (const AudioPipelineInterface::Status capture =
+          SetupCaptureClient(clients.render.format.get(), clients.capture);
+      !capture.ok()) {
+    return capture;
+  }
   return AudioPipelineInterface::Status::Ok();
 }
 
