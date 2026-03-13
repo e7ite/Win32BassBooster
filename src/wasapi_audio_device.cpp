@@ -23,6 +23,12 @@ using ScopedComPtr = std::unique_ptr<T, WasapiAudioDevice::ComRelease>;
 using ScopedWaveFormat =
     std::unique_ptr<WAVEFORMATEX, WasapiAudioDevice::CoTaskMemFreeDeleter>;
 
+[[nodiscard]] bool IsRecoverableStreamFailure(HRESULT failure) {
+  return failure == AUDCLNT_E_DEVICE_INVALIDATED ||
+         failure == AUDCLNT_E_RESOURCES_INVALIDATED ||
+         failure == AUDCLNT_E_SERVICE_NOT_RUNNING;
+}
+
 [[nodiscard]] AudioPipelineInterface::Status ValidateRenderMixFormat(
     const WAVEFORMATEX& render_format) {
   if (endpoint_audio_format::SupportsDirectStereoFloatCopy(render_format)) {
@@ -287,13 +293,37 @@ AudioPipelineInterface::Status WasapiAudioDevice::Open() {
 }
 
 AudioPipelineInterface::Status WasapiAudioDevice::StartStreams() {
-  return AudioPipelineInterface::Status::Error(
-      E_NOTIMPL, L"`WasapiAudioDevice::StartStreams` is not yet implemented");
+  if (capture_client_ == nullptr || render_client_ == nullptr) {
+    return AudioPipelineInterface::Status::Error(
+        E_POINTER, L"Capture or render client is null; call `Open()` first");
+  }
+
+  if (const HRESULT capture_start = capture_client_->Start();
+      FAILED(capture_start)) {
+    return AudioPipelineInterface::Status::Error(
+        capture_start, L"Capture client `Start()` failed");
+  }
+
+  if (const HRESULT render_start = render_client_->Start();
+      FAILED(render_start)) {
+    capture_client_->Stop();
+    return AudioPipelineInterface::Status::Error(
+        render_start, L"Render client `Start()` failed");
+  }
+  return AudioPipelineInterface::Status::Ok();
 }
 
-void WasapiAudioDevice::StopStreams() {}
+void WasapiAudioDevice::StopStreams() {
+  if (capture_client_ != nullptr) {
+    capture_client_->Stop();
+  }
+  if (render_client_ != nullptr) {
+    render_client_->Stop();
+  }
+}
 
 void WasapiAudioDevice::Close() {
+  StopStreams();
   capture_service_ = nullptr;
   render_service_ = nullptr;
   capture_client_ = nullptr;
@@ -314,7 +344,37 @@ HRESULT WasapiAudioDevice::WriteRenderPacket(std::span<const float> /*pcm*/) {
   return E_NOTIMPL;
 }
 
-bool WasapiAudioDevice::TryRecover(HRESULT /*failure*/) { return false; }
+bool WasapiAudioDevice::TryRecover(HRESULT failure) {
+  if (!IsRecoverableStreamFailure(failure)) {
+    return false;
+  }
+
+  StopStreams();
+
+  EndpointAcquisition endpoint = AcquireEndpoint();
+  if (!endpoint.status.ok()) {
+    return false;
+  }
+
+  StreamClientSetup clients;
+  if (!SetupStreamClients(*endpoint.render_device, clients).ok()) {
+    return false;
+  }
+
+  enumerator_ = std::move(endpoint.enumerator);
+  render_device_ = std::move(endpoint.render_device);
+  endpoint_name_ = std::move(endpoint.endpoint_name);
+  capture_client_ = std::move(clients.capture.audio_client);
+  capture_service_ = std::move(clients.capture.service);
+  render_client_ = std::move(clients.render.audio_client);
+  render_service_ = std::move(clients.render.service);
+  format_ = std::move(clients.render.format);
+
+  if (FAILED(capture_client_->Start())) {
+    return false;
+  }
+  return SUCCEEDED(render_client_->Start());
+}
 
 double WasapiAudioDevice::sample_rate() const { return 0.0; }
 
