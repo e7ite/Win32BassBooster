@@ -6,7 +6,6 @@
 #include <commctrl.h>
 #include <windows.h>
 
-#include <memory>
 #include <string>
 
 #include "audio_pipeline_interface.hpp"
@@ -20,7 +19,7 @@ using ::testing::DoubleNear;
 class MockAudioPipeline final : public AudioPipelineInterface {
  public:
   [[nodiscard]] AudioPipelineInterface::Status Start() override { return {}; }
-  void Stop() override {}
+  MOCK_METHOD(void, Stop, (), (override));
 
   MOCK_METHOD(void, SetBoostLevel, (double level), (override));
 
@@ -34,47 +33,27 @@ class MockAudioPipeline final : public AudioPipelineInterface {
   std::wstring name_ = L"Test Device";
 };
 
-// DestroyWindow posts teardown messages that can leak into the next test. In
-// live Win32 tests there is no API that auto-isolates or auto-clears the thread
-// message queue between `TEST` bodies; every approach (fixture or helper) must
-// explicitly drain it to keep tests deterministic.
-void DrainPendingMessages() {
+TEST(MainWindowTest, DestroyWindowStopsAudioPipeline) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
+  ASSERT_NE(window.hwnd(), nullptr);
+  ASSERT_NE(IsWindow(window.hwnd()), FALSE);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+
   MSG msg = {};
-  while (PeekMessageW(&msg, /*hWnd=*/nullptr, /*wMsgFilterMin=*/0,
-                      /*wMsgFilterMax=*/0, PM_REMOVE) != FALSE) {
-  }
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-class MainWindowLiveTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    pipeline_ = std::make_unique<MockAudioPipeline>();
-    window_ = std::make_unique<MainWindow>(pipeline_.get());
-    window_created_ =
-        window_->Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE);
-  }
+TEST(MainWindowTest, SliderRangeIsValid) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  void TearDown() override {
-    const bool has_live_window = window_ != nullptr && window_created_;
-    EXPECT_TRUE(has_live_window);
-
-    HWND hwnd = has_live_window ? window_->hwnd() : nullptr;
-    EXPECT_NE(hwnd, nullptr);
-    EXPECT_NE(IsWindow(hwnd), FALSE);
-    EXPECT_NE(DestroyWindow(hwnd), FALSE);
-
-    DrainPendingMessages();
-  }
-
-  std::unique_ptr<MockAudioPipeline> pipeline_;
-  std::unique_ptr<MainWindow> window_;
-  bool window_created_ = false;
-};
-
-TEST_F(MainWindowLiveTest, SliderRangeIsValid) {
-  ASSERT_TRUE(window_created_);
-
-  HWND slider = window_->slider_hwnd();
+  HWND slider = window.slider_hwnd();
   ASSERT_NE(slider, nullptr);
 
   const int slider_min = static_cast<int>(
@@ -83,12 +62,19 @@ TEST_F(MainWindowLiveTest, SliderRangeIsValid) {
       SendMessageW(slider, TBM_GETRANGEMAX, /*wParam=*/0, /*lParam=*/0));
 
   EXPECT_LT(slider_min, slider_max);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, HScrollMessageUpdatesBoostLevel) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, HScrollMessageUpdatesBoostLevel) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  HWND slider = window_->slider_hwnd();
+  HWND slider = window.slider_hwnd();
   ASSERT_NE(slider, nullptr);
 
   const int slider_min = static_cast<int>(
@@ -98,156 +84,254 @@ TEST_F(MainWindowLiveTest, HScrollMessageUpdatesBoostLevel) {
 
   const int midpoint = (slider_min + slider_max) / 2;
 
-  EXPECT_CALL(*pipeline_, SetBoostLevel(DoubleNear(0.5, 1e-6))).Times(1);
+  EXPECT_CALL(pipeline, SetBoostLevel(DoubleNear(0.5, 1e-6))).Times(1);
   SendMessageW(slider, TBM_SETPOS, TRUE, midpoint);
-  SendMessageW(window_->hwnd(), WM_HSCROLL,
+  SendMessageW(window.hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, midpoint),
                reinterpret_cast<LPARAM>(slider));
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, WindowHandleIsValid) {
-  ASSERT_TRUE(window_created_);
-  EXPECT_NE(window_->hwnd(), nullptr);
-  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+TEST(MainWindowTest, WindowHandleIsValid) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
+
+  EXPECT_NE(window.hwnd(), nullptr);
+  EXPECT_NE(IsWindow(window.hwnd()), FALSE);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, SliderHandleIsValid) {
-  ASSERT_TRUE(window_created_);
-  EXPECT_NE(window_->slider_hwnd(), nullptr);
-  EXPECT_NE(IsWindow(window_->slider_hwnd()), FALSE);
+TEST(MainWindowTest, SliderHandleIsValid) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
+
+  EXPECT_NE(window.slider_hwnd(), nullptr);
+  EXPECT_NE(IsWindow(window.slider_hwnd()), FALSE);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, SliderAtMinSetsZeroBoost) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, SliderAtMinSetsZeroBoost) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  HWND slider = window_->slider_hwnd();
+  HWND slider = window.slider_hwnd();
   ASSERT_NE(slider, nullptr);
 
   const int slider_min = static_cast<int>(
       SendMessageW(slider, TBM_GETRANGEMIN, /*wParam=*/0, /*lParam=*/0));
 
-  EXPECT_CALL(*pipeline_, SetBoostLevel(DoubleNear(0.0, 1e-6))).Times(1);
+  EXPECT_CALL(pipeline, SetBoostLevel(DoubleNear(0.0, 1e-6))).Times(1);
   SendMessageW(slider, TBM_SETPOS, TRUE, slider_min);
-  SendMessageW(window_->hwnd(), WM_HSCROLL,
+  SendMessageW(window.hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, slider_min),
                reinterpret_cast<LPARAM>(slider));
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, SliderAtMaxSetsMaxBoost) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, SliderAtMaxSetsMaxBoost) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  HWND slider = window_->slider_hwnd();
+  HWND slider = window.slider_hwnd();
   ASSERT_NE(slider, nullptr);
 
   const int slider_max = static_cast<int>(
       SendMessageW(slider, TBM_GETRANGEMAX, /*wParam=*/0, /*lParam=*/0));
 
-  EXPECT_CALL(*pipeline_, SetBoostLevel(DoubleNear(1.0, 1e-6))).Times(1);
+  EXPECT_CALL(pipeline, SetBoostLevel(DoubleNear(1.0, 1e-6))).Times(1);
   SendMessageW(slider, TBM_SETPOS, TRUE, slider_max);
-  SendMessageW(window_->hwnd(), WM_HSCROLL,
+  SendMessageW(window.hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, slider_max),
                reinterpret_cast<LPARAM>(slider));
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, GetMinMaxInfoEnforcesMinimumSize) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, GetMinMaxInfoEnforcesMinimumSize) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
   MINMAXINFO info = {};
-  SendMessageW(window_->hwnd(), WM_GETMINMAXINFO, /*wParam=*/0,
+  SendMessageW(window.hwnd(), WM_GETMINMAXINFO, /*wParam=*/0,
                reinterpret_cast<LPARAM>(&info));
 
   EXPECT_GT(info.ptMinTrackSize.x, 0);
   EXPECT_GT(info.ptMinTrackSize.y, 0);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, EraseBkgndReturnsNonZero) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, EraseBkgndReturnsNonZero) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  HDC hdc = GetDC(window_->hwnd());
+  HDC hdc = GetDC(window.hwnd());
   ASSERT_NE(hdc, nullptr);
 
-  LRESULT result = SendMessageW(window_->hwnd(), WM_ERASEBKGND,
+  LRESULT result = SendMessageW(window.hwnd(), WM_ERASEBKGND,
                                 reinterpret_cast<WPARAM>(hdc), /*lParam=*/0);
-  ReleaseDC(window_->hwnd(), hdc);
+  ReleaseDC(window.hwnd(), hdc);
 
   // Non-zero means the window handled the erase; prevents flicker.
   EXPECT_NE(result, 0);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, HScrollFromNonSliderIsIgnored) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, HScrollFromNonSliderIsIgnored) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
   // Send WM_HSCROLL with a null HWND (not the slider); should be ignored.
-  EXPECT_CALL(*pipeline_, SetBoostLevel).Times(0);
-  SendMessageW(window_->hwnd(), WM_HSCROLL, MAKEWPARAM(TB_THUMBPOSITION, 500),
+  EXPECT_CALL(pipeline, SetBoostLevel).Times(0);
+  SendMessageW(window.hwnd(), WM_HSCROLL, MAKEWPARAM(TB_THUMBPOSITION, 500),
                /*lParam=*/0);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, SizeMessageUpdatesLayout) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, SizeMessageUpdatesLayout) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
   constexpr int kNewWidth = 800;
   constexpr int kNewHeight = 300;
-  SendMessageW(window_->hwnd(), WM_SIZE, SIZE_RESTORED,
+  SendMessageW(window.hwnd(), WM_SIZE, SIZE_RESTORED,
                MAKELPARAM(kNewWidth, kNewHeight));
 
   // Window should still be valid after resize; layout was recomputed.
-  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+  EXPECT_NE(IsWindow(window.hwnd()), FALSE);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, ThemeChangedDoesNotCrash) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, ThemeChangedDoesNotCrash) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  SendMessageW(window_->hwnd(), WM_THEMECHANGED, /*wParam=*/0, /*lParam=*/0);
+  SendMessageW(window.hwnd(), WM_THEMECHANGED, /*wParam=*/0, /*lParam=*/0);
 
-  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+  EXPECT_NE(IsWindow(window.hwnd()), FALSE);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, SettingChangeDoesNotCrash) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, SettingChangeDoesNotCrash) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  SendMessageW(window_->hwnd(), WM_SETTINGCHANGE, /*wParam=*/0, /*lParam=*/0);
+  SendMessageW(window.hwnd(), WM_SETTINGCHANGE, /*wParam=*/0, /*lParam=*/0);
 
-  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+  EXPECT_NE(IsWindow(window.hwnd()), FALSE);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, PaintMessageDoesNotCrash) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, PaintMessageDoesNotCrash) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
   // Invalidate and force a paint cycle.
-  InvalidateRect(window_->hwnd(), /*lpRect=*/nullptr, /*bErase=*/FALSE);
-  SendMessageW(window_->hwnd(), WM_PAINT, /*wParam=*/0, /*lParam=*/0);
+  InvalidateRect(window.hwnd(), /*lpRect=*/nullptr, /*bErase=*/FALSE);
+  SendMessageW(window.hwnd(), WM_PAINT, /*wParam=*/0, /*lParam=*/0);
 
-  EXPECT_NE(IsWindow(window_->hwnd()), FALSE);
+  EXPECT_NE(IsWindow(window.hwnd()), FALSE);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, CtlColorStaticReturnsNonNullBrush) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, CtlColorStaticReturnsNonNullBrush) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  HDC hdc = GetDC(window_->hwnd());
+  HDC hdc = GetDC(window.hwnd());
   ASSERT_NE(hdc, nullptr);
 
   LRESULT result = SendMessageW(
-      window_->hwnd(), WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>(hdc),
-      reinterpret_cast<LPARAM>(window_->slider_hwnd()));
-  ReleaseDC(window_->hwnd(), hdc);
+      window.hwnd(), WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>(hdc),
+      reinterpret_cast<LPARAM>(window.slider_hwnd()));
+  ReleaseDC(window.hwnd(), hdc);
 
   // The brush handle must be non-null for the slider to paint correctly.
   EXPECT_NE(result, 0);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
-TEST_F(MainWindowLiveTest, CtlColorScrollbarReturnsNonNullBrush) {
-  ASSERT_TRUE(window_created_);
+TEST(MainWindowTest, CtlColorScrollbarReturnsNonNullBrush) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE));
 
-  HDC hdc = GetDC(window_->hwnd());
+  HDC hdc = GetDC(window.hwnd());
   ASSERT_NE(hdc, nullptr);
 
   LRESULT result = SendMessageW(
-      window_->hwnd(), WM_CTLCOLORSCROLLBAR, reinterpret_cast<WPARAM>(hdc),
-      reinterpret_cast<LPARAM>(window_->slider_hwnd()));
-  ReleaseDC(window_->hwnd(), hdc);
+      window.hwnd(), WM_CTLCOLORSCROLLBAR, reinterpret_cast<WPARAM>(hdc),
+      reinterpret_cast<LPARAM>(window.slider_hwnd()));
+  ReleaseDC(window.hwnd(), hdc);
 
   EXPECT_NE(result, 0);
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+  MSG msg = {};
+  PeekMessageW(&msg, /*hWnd=*/nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
 }
 
 }  // namespace
