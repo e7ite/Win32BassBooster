@@ -1,5 +1,6 @@
-﻿// Verifies the pipeline's initial state, boost level clamping, gain curve
-// shape, stop idempotency, and start/stop lifecycle with real COM resources.
+// Verifies the pipeline's initial state, boost level clamping, gain curve
+// shape, stop idempotency, and lifecycle behavior through a mix of injected
+// and live audio paths.
 
 #include "audio_pipeline.hpp"
 
@@ -8,32 +9,71 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <utility>
 
+#include "audio_device.hpp"
 #include "bass_boost_filter.hpp"
 #include "gtest/gtest.h"
 
 namespace {
 
+class MockAudioDevice final : public AudioDevice {
+ public:
+  void SetOpenStatus(AudioPipelineInterface::Status status) {
+    open_status_ = std::move(status);
+  }
+
+  AudioPipelineInterface::Status Open() override {
+    opened_ = open_status_.ok();
+    return open_status_;
+  }
+
+  AudioPipelineInterface::Status StartStreams() override {
+    return AudioPipelineInterface::Status::Ok();
+  }
+
+  void StopStreams() override {}
+
+  void Close() override { opened_ = false; }
+
+  CapturePacket ReadNextPacket() override { return {}; }
+
+  HRESULT WriteRenderPacket(std::span<const float> /*pcm*/) override {
+    return S_OK;
+  }
+
+  bool TryRecover(HRESULT /*failure*/) override { return false; }
+
+  double sample_rate() const override { return 48000.0; }
+
+  const std::wstring& endpoint_name() const override { return endpoint_name_; }
+
+ private:
+  AudioPipelineInterface::Status open_status_;
+  std::wstring endpoint_name_;
+  bool opened_ = false;
+};
+
 TEST(AudioPipelineTest, NotRunningBeforeStart) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   EXPECT_FALSE(pipeline.is_running());
 }
 
 TEST(AudioPipelineTest, DefaultGainIsZero) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   EXPECT_NEAR(pipeline.gain_db(), 0.0, 1e-9);
 }
 
 TEST(AudioPipelineTest, EndpointNameEmptyBeforeInitialize) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   EXPECT_TRUE(pipeline.endpoint_name().empty());
 }
 
 TEST(AudioPipelineTest, MaxBoostSetsMaxGain) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(1.0);
 
@@ -41,7 +81,7 @@ TEST(AudioPipelineTest, MaxBoostSetsMaxGain) {
 }
 
 TEST(AudioPipelineTest, FlatBoostSetsZeroGain) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(0.0);
 
@@ -50,7 +90,7 @@ TEST(AudioPipelineTest, FlatBoostSetsZeroGain) {
 
 TEST(AudioPipelineTest, HalfBoostScalesGainBySqrt) {
   constexpr double kHalfLevel = 0.5;
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(kHalfLevel);
 
@@ -62,7 +102,7 @@ TEST(AudioPipelineTest, BoostCurveIsConvexAtMidpoint) {
   // sqrt(0.5) ~= 0.707, more than the linear 0.5: audible boost well before
   // max.
   constexpr double kHalfLevel = 0.5;
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(kHalfLevel);
 
@@ -72,7 +112,7 @@ TEST(AudioPipelineTest, BoostCurveIsConvexAtMidpoint) {
 TEST(AudioPipelineTest, BoostCurveIsConvexAtQuarterLevel) {
   // sqrt(0.25) = 0.5, more than the linear 0.25.
   constexpr double kQuarterLevel = 0.25;
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(kQuarterLevel);
 
@@ -81,7 +121,7 @@ TEST(AudioPipelineTest, BoostCurveIsConvexAtQuarterLevel) {
 
 TEST(AudioPipelineTest, BoostLevelClampedAboveOne) {
   constexpr double kAboveMaxLevel = 2.0;
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(kAboveMaxLevel);
 
@@ -89,7 +129,7 @@ TEST(AudioPipelineTest, BoostLevelClampedAboveOne) {
 }
 
 TEST(AudioPipelineTest, BoostLevelClampedBelowZero) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(-1.0);
 
@@ -97,7 +137,7 @@ TEST(AudioPipelineTest, BoostLevelClampedBelowZero) {
 }
 
 TEST(AudioPipelineTest, StopBeforeStartIsSafe) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.Stop();
 
@@ -106,7 +146,7 @@ TEST(AudioPipelineTest, StopBeforeStartIsSafe) {
 
 // SetBoostLevel multiple times should always reflect the latest value.
 TEST(AudioPipelineTest, RepeatedBoostLevelUpdatesReflectLatest) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(0.0);
   pipeline.SetBoostLevel(1.0);
@@ -116,7 +156,7 @@ TEST(AudioPipelineTest, RepeatedBoostLevelUpdatesReflectLatest) {
 
 TEST(AudioPipelineTest, GainFollowsSqrtAtThreeQuarterLevel) {
   constexpr double kThreeQuarterLevel = 0.75;
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(kThreeQuarterLevel);
 
@@ -126,7 +166,7 @@ TEST(AudioPipelineTest, GainFollowsSqrtAtThreeQuarterLevel) {
 }
 
 TEST(AudioPipelineTest, DoubleStopIsSafe) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.Stop();
   pipeline.Stop();
@@ -135,16 +175,15 @@ TEST(AudioPipelineTest, DoubleStopIsSafe) {
 }
 
 TEST(AudioPipelineTest, DestructorAfterStopIsSafe) {
-  auto pipeline = std::make_unique<AudioPipeline>();
-  pipeline->Stop();
-  pipeline.reset();
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
+  pipeline.Stop();
 
   // If we reach here, the destructor did not crash after explicit Stop.
   SUCCEED();
 }
 
 TEST(AudioPipelineTest, SetBoostLevelAfterStopStillUpdatesGain) {
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.Stop();
   pipeline.SetBoostLevel(1.0);
@@ -154,7 +193,7 @@ TEST(AudioPipelineTest, SetBoostLevelAfterStopStillUpdatesGain) {
 
 TEST(AudioPipelineTest, GainFollowsSqrtAtTenPercentLevel) {
   constexpr double kTenPercentLevel = 0.1;
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(kTenPercentLevel);
 
@@ -164,7 +203,7 @@ TEST(AudioPipelineTest, GainFollowsSqrtAtTenPercentLevel) {
 
 TEST(AudioPipelineTest, GainFollowsSqrtAtNinetyPercentLevel) {
   constexpr double kNinetyPercentLevel = 0.9;
-  AudioPipeline pipeline;
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
   pipeline.SetBoostLevel(kNinetyPercentLevel);
 
