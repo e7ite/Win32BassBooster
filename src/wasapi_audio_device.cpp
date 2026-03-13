@@ -184,8 +184,14 @@ AudioPipelineInterface::Status WasapiAudioDevice::Open() {
   if (!endpoint.status.ok()) {
     return endpoint.status;
   }
+  RenderClientSetup render_setup;
+  if (const AudioPipelineInterface::Status status =
+          SetupRenderClient(*endpoint.render_device, render_setup);
+      !status.ok()) {
+    return status;
+  }
   return AudioPipelineInterface::Status::Error(
-      E_NOTIMPL, L"`WasapiAudioDevice::Open` still needs stream client setup");
+      E_NOTIMPL, L"`WasapiAudioDevice::Open` still needs capture client setup");
 }
 
 AudioPipelineInterface::Status WasapiAudioDevice::StartStreams() {
