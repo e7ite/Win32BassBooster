@@ -12,6 +12,8 @@
 #include <functiondiscoverykeys_devpkey.h>
 #include <mmdeviceapi.h>
 
+#include <cstring>
+
 #include "endpoint_audio_format.hpp"
 #include "loopback_capture_activation.hpp"
 
@@ -336,12 +338,85 @@ void WasapiAudioDevice::Close() {
 
 CapturePacket WasapiAudioDevice::ReadNextPacket() {
   CapturePacket packet;
-  packet.status = E_NOTIMPL;
+  if (capture_service_ == nullptr || format_ == nullptr) {
+    packet.status = E_POINTER;
+    return packet;
+  }
+
+  UINT32 packet_size = 0;
+  if (const HRESULT query = capture_service_->GetNextPacketSize(&packet_size);
+      FAILED(query)) {
+    packet.status = query;
+    return packet;
+  }
+  if (packet_size == 0) {
+    return packet;
+  }
+
+  BYTE* capture_bytes = nullptr;
+  UINT32 frames = 0;
+  DWORD flags = 0;
+  if (const HRESULT get_buf = capture_service_->GetBuffer(
+          &capture_bytes, &frames, &flags,
+          /*device_position=*/nullptr, /*qpc_position=*/nullptr);
+      FAILED(get_buf)) {
+    packet.status = get_buf;
+    return packet;
+  }
+
+  packet.frames = frames;
+  packet.silent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
+
+  if (!packet.silent && frames > 0) {
+    endpoint_audio_format::StereoPcmBuffer buf =
+        endpoint_audio_format::DecodeToStereoFloat(capture_bytes, frames,
+                                                   *format_);
+    packet.samples = std::move(buf.samples);
+    packet.frames = buf.frames;
+  }
+
+  capture_service_->ReleaseBuffer(frames);
   return packet;
 }
 
-HRESULT WasapiAudioDevice::WriteRenderPacket(std::span<const float> /*pcm*/) {
-  return E_NOTIMPL;
+HRESULT WasapiAudioDevice::WriteRenderPacket(std::span<const float> pcm) {
+  if (render_client_ == nullptr || render_service_ == nullptr) {
+    return E_POINTER;
+  }
+
+  const UINT32 frames = static_cast<UINT32>(pcm.size() / 2);
+  if (frames == 0) {
+    return S_OK;
+  }
+
+  UINT32 render_buf_size = 0;
+  UINT32 render_padding = 0;
+  if (const HRESULT status = render_client_->GetBufferSize(&render_buf_size);
+      FAILED(status)) {
+    return status;
+  }
+  if (const HRESULT status = render_client_->GetCurrentPadding(&render_padding);
+      FAILED(status)) {
+    return status;
+  }
+
+  const UINT32 available = render_buf_size - render_padding;
+  if (available < frames) {
+    return S_FALSE;
+  }
+
+  BYTE* render_buf = nullptr;
+  if (const HRESULT status = render_service_->GetBuffer(frames, &render_buf);
+      FAILED(status)) {
+    return status;
+  }
+  if (render_buf == nullptr) {
+    render_service_->ReleaseBuffer(frames, AUDCLNT_BUFFERFLAGS_SILENT);
+    return E_POINTER;
+  }
+
+  std::memcpy(render_buf, pcm.data(), pcm.size_bytes());
+  return render_service_->ReleaseBuffer(frames, /*dwFlags=*/0);
 }
 
 bool WasapiAudioDevice::TryRecover(HRESULT failure) {
