@@ -24,6 +24,8 @@ Makefile
 x64/
 Debug/
 Release/
+coverage/
+coverage-local/
 *.log
 tmpclaude-*
 .claude/

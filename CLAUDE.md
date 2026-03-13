@@ -1021,6 +1021,11 @@ Good:
 - Never remove, disable, or weaken a test to make CI pass. A failing test is a
   signal to fix production code, fix the test environment, or add the missing
   injectable boundary or test double -- not to delete the coverage.
+- When a change touches production code or tests, run the normal local coverage
+  workflow before finishing. Coverage should usually go up or stay within
+  normal noise of the current baseline. If local coverage drops in a noticeable
+  way, treat it as a regression: add coverage, explain the tradeoff, or flag it
+  clearly instead of silently accepting the drop.
 
 ```cpp
 // Bad: test adds control flow to adapt to runtime environment details.
@@ -1054,6 +1059,12 @@ TEST(AudioPipelineTest, StartSucceedsWithInjectedDevice) {
   `TearDown()` genuinely manage a resource lifecycle (for example, creating and
   destroying a real Win32 window). Sharing a constant or a trivially
   constructed object is not a reason for a fixture.
+- In tests, prefer explicit duplication over helpers, fixtures, or wrappers
+  that add automatic logic. It is acceptable to repeat small setup and cleanup
+  in each test when that keeps the scenario straight-line and visible at the
+  call site. Do not add `if`, `switch`, `for`, `while`, constructors,
+  destructors, or other hidden control flow in test fixtures or test helpers
+  just to reduce repetition.
 
 ```cpp
 // Bad: fixture just to share a constant.
@@ -1067,6 +1078,40 @@ TEST_F(ToneFilterTest, GainIsZero) { ... }
 TEST(ToneFilterTest, GainIsZero) {
   ToneFilter filter(48000.0);
   ...
+}
+
+// Bad: helper hides cleanup and control flow to avoid duplication.
+class LiveWindow {
+ public:
+  ~LiveWindow() {
+    DestroyWindow(window_.hwnd());
+    MSG msg = {};
+    PeekMessageW(&msg, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE);
+  }
+
+ private:
+  MainWindow window_;
+};
+
+// Good: duplicate the few lines so each scenario stays visible.
+TEST(MainWindowTest, DestroyWindowStopsAudioPipeline) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(nullptr), SW_HIDE));
+
+  EXPECT_CALL(pipeline, Stop).Times(1);
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
+}
+
+TEST(MainWindowTest, HScrollFromNonSliderIsIgnored) {
+  MockAudioPipeline pipeline;
+  MainWindow window(&pipeline);
+  ASSERT_TRUE(window.Create(GetModuleHandleW(nullptr), SW_HIDE));
+
+  EXPECT_CALL(pipeline, SetBoostLevel).Times(0);
+  SendMessageW(window.hwnd(), WM_HSCROLL, MAKEWPARAM(TB_THUMBPOSITION, 500), 0);
+
+  EXPECT_NE(DestroyWindow(window.hwnd()), FALSE);
 }
 ```
 
