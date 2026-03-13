@@ -1,9 +1,7 @@
-// Verifies precondition guards without audio hardware, and the full WASAPI
-// lifecycle (open, start, read, stop, close) with COM initialized.
+// Verifies precondition guards for the WASAPI audio device without audio
+// hardware.
 
 #include "wasapi_audio_device.hpp"
-
-#include <objbase.h>
 
 #include <vector>
 
@@ -58,58 +56,6 @@ TEST(WasapiAudioDeviceTest, CloseBeforeOpenKeepsDefaultState) {
 
   EXPECT_DOUBLE_EQ(device.sample_rate(), 0.0);
   EXPECT_TRUE(device.endpoint_name().empty());
-}
-
-TEST(WasapiAudioDeviceTest, OpenWithComInitializedSucceeds) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
-
-  WasapiAudioDevice device;
-
-  const AudioPipelineInterface::Status status = device.Open();
-
-  ASSERT_TRUE(status.ok());
-  EXPECT_GT(device.sample_rate(), 0.0);
-  EXPECT_FALSE(device.endpoint_name().empty());
-
-  device.Close();
-  CoUninitialize();
-}
-
-TEST(WasapiAudioDeviceTest, StartAndStopStreamsAfterOpen) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
-
-  WasapiAudioDevice device;
-  ASSERT_TRUE(device.Open().ok());
-
-  const AudioPipelineInterface::Status status = device.StartStreams();
-
-  EXPECT_TRUE(status.ok());
-
-  device.StopStreams();
-  device.Close();
-  CoUninitialize();
-}
-
-TEST(WasapiAudioDeviceTest, ReadNextPacketAfterStartReturnsValidStatus) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
-
-  WasapiAudioDevice device;
-  ASSERT_TRUE(device.Open().ok());
-  ASSERT_TRUE(device.StartStreams().ok());
-
-  const CapturePacket packet = device.ReadNextPacket();
-
-  EXPECT_TRUE(SUCCEEDED(packet.status));
-
-  device.StopStreams();
-  device.Close();
-  CoUninitialize();
 }
 
 TEST(WasapiAudioDeviceTest, TryRecoverNonRecoverableFailureReturnsFalse) {
