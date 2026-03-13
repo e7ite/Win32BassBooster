@@ -8,13 +8,61 @@
 #include <initguid.h>
 // clang-format on
 
+#include <audioclient.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <mmdeviceapi.h>
+
+#include "endpoint_audio_format.hpp"
 
 namespace {
 
 template <typename T>
 using ScopedComPtr = std::unique_ptr<T, WasapiAudioDevice::ComRelease>;
+
+using ScopedWaveFormat =
+    std::unique_ptr<WAVEFORMATEX, WasapiAudioDevice::CoTaskMemFreeDeleter>;
+
+[[nodiscard]] AudioPipelineInterface::Status ValidateRenderMixFormat(
+    const WAVEFORMATEX& render_format) {
+  if (endpoint_audio_format::SupportsDirectStereoFloatCopy(render_format)) {
+    return AudioPipelineInterface::Status::Ok();
+  }
+  return AudioPipelineInterface::Status::Error(
+      AUDCLNT_E_UNSUPPORTED_FORMAT,
+      L"Render mix format is not packed float32 stereo; "
+      L"conversion path is unavailable");
+}
+
+[[nodiscard]] AudioPipelineInterface::Status InitializeRenderClient(
+    IAudioClient& audio_client, WAVEFORMATEX* render_format) {
+  // 20 ms is the lowest buffer duration that avoids glitches on most Windows
+  // hardware while keeping latency perceptually invisible. WASAPI measures
+  // time in 100-nanosecond units; 20 ms = 200,000 units.
+  constexpr REFERENCE_TIME kRenderBufferDuration20Ms = 200'000;
+
+  if (const HRESULT initialize_render =
+          audio_client.Initialize(AUDCLNT_SHAREMODE_SHARED, /*StreamFlags=*/0,
+                                  kRenderBufferDuration20Ms,
+                                  /*hnsPeriodicity=*/0, render_format,
+                                  /*audioSessionGuid=*/nullptr);
+      FAILED(initialize_render)) {
+    return AudioPipelineInterface::Status::Error(
+        initialize_render, L"IAudioClient::Initialize (render) failed");
+  }
+  return AudioPipelineInterface::Status::Ok();
+}
+
+[[nodiscard]] AudioPipelineInterface::Status AcquireRenderClientService(
+    IAudioClient& audio_client, IAudioRenderClient*& raw_audio_render_client) {
+  if (const HRESULT render_service = audio_client.GetService(
+          __uuidof(IAudioRenderClient),
+          reinterpret_cast<void**>(&raw_audio_render_client));
+      FAILED(render_service)) {
+    return AudioPipelineInterface::Status::Error(
+        render_service, L"GetService IAudioRenderClient failed");
+  }
+  return AudioPipelineInterface::Status::Ok();
+}
 
 void ReadEndpointName(IMMDevice* render_device, std::wstring& endpoint_name) {
   if (render_device == nullptr) {
@@ -76,6 +124,55 @@ struct EndpointAcquisition {
 
   ReadEndpointName(endpoint.render_device.get(), endpoint.endpoint_name);
   return endpoint;
+}
+
+struct RenderClientSetup {
+  ScopedComPtr<IAudioClient> audio_client;
+  ScopedComPtr<IAudioRenderClient> service;
+  ScopedWaveFormat format;
+};
+
+[[nodiscard]] AudioPipelineInterface::Status SetupRenderClient(
+    IMMDevice& render_device, RenderClientSetup& setup) {
+  IAudioClient* raw_render = nullptr;
+  if (const HRESULT activate_render = render_device.Activate(
+          __uuidof(IAudioClient), CLSCTX_ALL,
+          /*pActivationParams=*/nullptr, reinterpret_cast<void**>(&raw_render));
+      FAILED(activate_render)) {
+    return AudioPipelineInterface::Status::Error(
+        activate_render, L"Activate render IAudioClient failed");
+  }
+  setup.audio_client.reset(raw_render);
+
+  WAVEFORMATEX* raw_render_format = nullptr;
+  if (const HRESULT render_mix_format =
+          setup.audio_client->GetMixFormat(&raw_render_format);
+      FAILED(render_mix_format)) {
+    return AudioPipelineInterface::Status::Error(
+        render_mix_format, L"GetMixFormat (render) failed");
+  }
+  setup.format.reset(raw_render_format);
+  if (const AudioPipelineInterface::Status format_check =
+          ValidateRenderMixFormat(*setup.format);
+      !format_check.ok()) {
+    return format_check;
+  }
+
+  if (const AudioPipelineInterface::Status render_init =
+          InitializeRenderClient(*setup.audio_client, setup.format.get());
+      !render_init.ok()) {
+    return render_init;
+  }
+
+  IAudioRenderClient* raw_audio_render_client = nullptr;
+  if (const AudioPipelineInterface::Status render_service =
+          AcquireRenderClientService(*setup.audio_client,
+                                     raw_audio_render_client);
+      !render_service.ok()) {
+    return render_service;
+  }
+  setup.service.reset(raw_audio_render_client);
+  return AudioPipelineInterface::Status::Ok();
 }
 
 }  // namespace
