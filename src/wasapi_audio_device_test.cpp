@@ -1,5 +1,5 @@
-// Verifies `WasapiAudioDevice` behavior without real audio hardware by using a
-// controlled test peer plus fake COM clients.
+// Verifies `WasapiAudioDevice` behavior without real audio hardware by using
+// constructor-injected clients plus fake COM clients.
 
 #include "wasapi_audio_device.hpp"
 
@@ -9,38 +9,6 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-
-class WasapiAudioDeviceTestPeer {
- public:
-  static void SetCaptureClient(WasapiAudioDevice& device,
-                               IAudioClient* capture_client) {
-    device.capture_client_.reset(capture_client);
-  }
-
-  static void SetRenderClient(WasapiAudioDevice& device,
-                              IAudioClient* render_client) {
-    device.render_client_.reset(render_client);
-  }
-
-  static void SetCaptureService(WasapiAudioDevice& device,
-                                IAudioCaptureClient* capture_service) {
-    device.capture_service_.reset(capture_service);
-  }
-
-  static void SetRenderService(WasapiAudioDevice& device,
-                               IAudioRenderClient* render_service) {
-    device.render_service_.reset(render_service);
-  }
-
-  static void SetFormat(WasapiAudioDevice& device, WAVEFORMATEX* format) {
-    device.format_.reset(format);
-  }
-
-  static void SetEndpointName(WasapiAudioDevice& device,
-                              std::wstring endpoint_name) {
-    device.endpoint_name_ = std::move(endpoint_name);
-  }
-};
 
 namespace {
 
@@ -365,12 +333,11 @@ TEST(WasapiAudioDeviceTest, StartStreamsBeforeOpenFails) {
 }
 
 TEST(WasapiAudioDeviceTest, StartStreamsCaptureStartFailureReturnsError) {
-  WasapiAudioDevice device;
   auto* capture_client = new FakeAudioClient();
   auto* render_client = new FakeAudioClient();
   capture_client->SetStartResult(E_FAIL);
-  WasapiAudioDeviceTestPeer::SetCaptureClient(device, capture_client);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
+  WasapiAudioDevice device(
+      {.capture_client = capture_client, .render_client = render_client});
 
   const AudioPipelineInterface::Status status = device.StartStreams();
 
@@ -381,12 +348,11 @@ TEST(WasapiAudioDeviceTest, StartStreamsCaptureStartFailureReturnsError) {
 }
 
 TEST(WasapiAudioDeviceTest, StartStreamsRenderStartFailureStopsCapture) {
-  WasapiAudioDevice device;
   auto* capture_client = new FakeAudioClient();
   auto* render_client = new FakeAudioClient();
   render_client->SetStartResult(E_FAIL);
-  WasapiAudioDeviceTestPeer::SetCaptureClient(device, capture_client);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
+  WasapiAudioDevice device(
+      {.capture_client = capture_client, .render_client = render_client});
 
   const AudioPipelineInterface::Status status = device.StartStreams();
 
@@ -398,11 +364,10 @@ TEST(WasapiAudioDeviceTest, StartStreamsRenderStartFailureStopsCapture) {
 }
 
 TEST(WasapiAudioDeviceTest, StartStreamsStartsConfiguredClients) {
-  WasapiAudioDevice device;
   auto* capture_client = new FakeAudioClient();
   auto* render_client = new FakeAudioClient();
-  WasapiAudioDeviceTestPeer::SetCaptureClient(device, capture_client);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
+  WasapiAudioDevice device(
+      {.capture_client = capture_client, .render_client = render_client});
 
   const AudioPipelineInterface::Status status = device.StartStreams();
 
@@ -412,11 +377,10 @@ TEST(WasapiAudioDeviceTest, StartStreamsStartsConfiguredClients) {
 }
 
 TEST(WasapiAudioDeviceTest, StopStreamsStopsConfiguredClients) {
-  WasapiAudioDevice device;
   auto* capture_client = new FakeAudioClient();
   auto* render_client = new FakeAudioClient();
-  WasapiAudioDeviceTestPeer::SetCaptureClient(device, capture_client);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
+  WasapiAudioDevice device(
+      {.capture_client = capture_client, .render_client = render_client});
 
   device.StopStreams();
 
@@ -436,15 +400,14 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketBeforeOpenReturnsPointerError) {
 }
 
 TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsQueryError) {
-  WasapiAudioDevice device;
   auto* capture_service = new FakeAudioCaptureClient();
   capture_service->SetGetNextPacketSizeResult(E_FAIL);
   const WAVEFORMATEX format = MakeFloatStereoFormat();
   auto* raw_format = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
   ASSERT_NE(raw_format, nullptr);
   *raw_format = format;
-  WasapiAudioDeviceTestPeer::SetCaptureService(device, capture_service);
-  WasapiAudioDeviceTestPeer::SetFormat(device, raw_format);
+  WasapiAudioDevice device(
+      {.capture_service = capture_service, .format = raw_format});
 
   const CapturePacket packet = device.ReadNextPacket();
 
@@ -454,15 +417,14 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsQueryError) {
 }
 
 TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsEmptyWhenNoFramesPending) {
-  WasapiAudioDevice device;
   auto* capture_service = new FakeAudioCaptureClient();
   capture_service->SetNextPacketSize(0);
   const WAVEFORMATEX format = MakeFloatStereoFormat();
   auto* raw_format = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
   ASSERT_NE(raw_format, nullptr);
   *raw_format = format;
-  WasapiAudioDeviceTestPeer::SetCaptureService(device, capture_service);
-  WasapiAudioDeviceTestPeer::SetFormat(device, raw_format);
+  WasapiAudioDevice device(
+      {.capture_service = capture_service, .format = raw_format});
 
   const CapturePacket packet = device.ReadNextPacket();
 
@@ -472,7 +434,6 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsEmptyWhenNoFramesPending) {
 }
 
 TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsGetBufferError) {
-  WasapiAudioDevice device;
   auto* capture_service = new FakeAudioCaptureClient();
   capture_service->SetNextPacketSize(1);
   capture_service->SetGetBufferResult(E_FAIL);
@@ -480,8 +441,8 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsGetBufferError) {
   auto* raw_format = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
   ASSERT_NE(raw_format, nullptr);
   *raw_format = format;
-  WasapiAudioDeviceTestPeer::SetCaptureService(device, capture_service);
-  WasapiAudioDeviceTestPeer::SetFormat(device, raw_format);
+  WasapiAudioDevice device(
+      {.capture_service = capture_service, .format = raw_format});
 
   const CapturePacket packet = device.ReadNextPacket();
 
@@ -491,7 +452,6 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsGetBufferError) {
 }
 
 TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsSilentPacket) {
-  WasapiAudioDevice device;
   auto* capture_service = new FakeAudioCaptureClient();
   capture_service->SetNextPacketSize(1);
   capture_service->SetPacket(/*bytes=*/{}, /*frames=*/2,
@@ -500,8 +460,8 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsSilentPacket) {
   auto* raw_format = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
   ASSERT_NE(raw_format, nullptr);
   *raw_format = format;
-  WasapiAudioDeviceTestPeer::SetCaptureService(device, capture_service);
-  WasapiAudioDeviceTestPeer::SetFormat(device, raw_format);
+  WasapiAudioDevice device(
+      {.capture_service = capture_service, .format = raw_format});
 
   const CapturePacket packet = device.ReadNextPacket();
 
@@ -513,7 +473,6 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketReturnsSilentPacket) {
 }
 
 TEST(WasapiAudioDeviceTest, ReadNextPacketDecodesStereoFloatPacket) {
-  WasapiAudioDevice device;
   auto* capture_service = new FakeAudioCaptureClient();
   capture_service->SetNextPacketSize(1);
   capture_service->SetPacket(
@@ -523,8 +482,8 @@ TEST(WasapiAudioDeviceTest, ReadNextPacketDecodesStereoFloatPacket) {
   auto* raw_format = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
   ASSERT_NE(raw_format, nullptr);
   *raw_format = format;
-  WasapiAudioDeviceTestPeer::SetCaptureService(device, capture_service);
-  WasapiAudioDeviceTestPeer::SetFormat(device, raw_format);
+  WasapiAudioDevice device(
+      {.capture_service = capture_service, .format = raw_format});
 
   const CapturePacket packet = device.ReadNextPacket();
 
@@ -546,11 +505,10 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketBeforeOpenReturnsPointerError) {
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketWithNoFramesReturnsSuccess) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::vector<float> samples;
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -559,12 +517,11 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketWithNoFramesReturnsSuccess) {
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsBufferSizeError) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
   render_client->SetBufferSizeResult(E_FAIL);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::array<float, 4> samples = {0.25F, -0.25F, 0.5F, -0.5F};
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -573,13 +530,12 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsBufferSizeError) {
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsPaddingError) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
   render_client->SetBufferSize(4);
   render_client->SetCurrentPaddingResult(E_FAIL);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::array<float, 4> samples = {0.25F, -0.25F, 0.5F, -0.5F};
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -588,13 +544,12 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsPaddingError) {
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsSFalseWhenBufferIsFull) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
   render_client->SetBufferSize(2);
   render_client->SetCurrentPadding(1);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::array<float, 4> samples = {0.25F, -0.25F, 0.5F, -0.5F};
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -603,14 +558,13 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsSFalseWhenBufferIsFull) {
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsGetBufferError) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
   render_client->SetBufferSize(4);
   render_client->SetCurrentPadding(0);
   render_service->SetGetBufferResult(E_FAIL);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::array<float, 4> samples = {0.25F, -0.25F, 0.5F, -0.5F};
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -619,14 +573,13 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsGetBufferError) {
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsReleaseBufferError) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
   render_client->SetBufferSize(4);
   render_client->SetCurrentPadding(0);
   render_service->SetReleaseBufferResult(E_FAIL);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::array<float, 4> samples = {0.25F, -0.25F, 0.5F, -0.5F};
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -636,14 +589,13 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsReleaseBufferError) {
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsPointerErrorWhenBufferIsNull) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
   render_client->SetBufferSize(4);
   render_client->SetCurrentPadding(0);
   render_service->SetReturnNullBuffer(true);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::array<float, 4> samples = {0.25F, -0.25F, 0.5F, -0.5F};
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -653,13 +605,12 @@ TEST(WasapiAudioDeviceTest, WriteRenderPacketReturnsPointerErrorWhenBufferIsNull
 }
 
 TEST(WasapiAudioDeviceTest, WriteRenderPacketCopiesSamplesIntoRenderBuffer) {
-  WasapiAudioDevice device;
   auto* render_client = new FakeAudioClient();
   auto* render_service = new FakeAudioRenderClient();
   render_client->SetBufferSize(4);
   render_client->SetCurrentPadding(0);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetRenderService(device, render_service);
+  WasapiAudioDevice device(
+      {.render_client = render_client, .render_service = render_service});
   const std::vector<float> samples = {0.25F, -0.25F, 0.5F, -0.5F};
 
   const HRESULT status = device.WriteRenderPacket(samples);
@@ -681,26 +632,23 @@ TEST(WasapiAudioDeviceTest, CloseBeforeOpenKeepsDefaultState) {
 }
 
 TEST(WasapiAudioDeviceTest, SampleRateReturnsConfiguredFormatRate) {
-  WasapiAudioDevice device;
   WAVEFORMATEX format = MakeFloatStereoFormat();
   format.nSamplesPerSec = 44100;
   auto* raw_format = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
   ASSERT_NE(raw_format, nullptr);
   *raw_format = format;
-  WasapiAudioDeviceTestPeer::SetFormat(device, raw_format);
+  WasapiAudioDevice device({.format = raw_format});
 
   EXPECT_DOUBLE_EQ(device.sample_rate(), 44100.0);
 }
 
 TEST(WasapiAudioDeviceTest, EndpointNameReturnsConfiguredName) {
-  WasapiAudioDevice device;
-  WasapiAudioDeviceTestPeer::SetEndpointName(device, L"Configured Endpoint");
+  WasapiAudioDevice device({.endpoint_name = L"Configured Endpoint"});
 
   EXPECT_EQ(device.endpoint_name(), L"Configured Endpoint");
 }
 
 TEST(WasapiAudioDeviceTest, CloseClearsLiveStateAndKeepsEndpointName) {
-  WasapiAudioDevice device;
   auto* capture_client = new FakeAudioClient();
   auto* render_client = new FakeAudioClient();
   capture_client->AddRef();
@@ -709,12 +657,12 @@ TEST(WasapiAudioDeviceTest, CloseClearsLiveStateAndKeepsEndpointName) {
   auto* raw_format = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
   ASSERT_NE(raw_format, nullptr);
   *raw_format = format;
-  WasapiAudioDeviceTestPeer::SetCaptureClient(device, capture_client);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
-  WasapiAudioDeviceTestPeer::SetCaptureService(device, new FakeAudioCaptureClient());
-  WasapiAudioDeviceTestPeer::SetRenderService(device, new FakeAudioRenderClient());
-  WasapiAudioDeviceTestPeer::SetFormat(device, raw_format);
-  WasapiAudioDeviceTestPeer::SetEndpointName(device, L"Configured Endpoint");
+  WasapiAudioDevice device({.capture_client = capture_client,
+                            .render_client = render_client,
+                            .capture_service = new FakeAudioCaptureClient(),
+                            .render_service = new FakeAudioRenderClient(),
+                            .format = raw_format,
+                            .endpoint_name = L"Configured Endpoint"});
 
   device.Close();
 
@@ -755,11 +703,10 @@ TEST(WasapiAudioDeviceTest,
 
 TEST(WasapiAudioDeviceTest,
      TryRecoverRecoverableFailureStopsConfiguredClientsBeforeReturningFalse) {
-  WasapiAudioDevice device;
   auto* capture_client = new FakeAudioClient();
   auto* render_client = new FakeAudioClient();
-  WasapiAudioDeviceTestPeer::SetCaptureClient(device, capture_client);
-  WasapiAudioDeviceTestPeer::SetRenderClient(device, render_client);
+  WasapiAudioDevice device(
+      {.capture_client = capture_client, .render_client = render_client});
 
   EXPECT_FALSE(device.TryRecover(AUDCLNT_E_DEVICE_INVALIDATED));
   EXPECT_EQ(capture_client->stop_calls(), 1);

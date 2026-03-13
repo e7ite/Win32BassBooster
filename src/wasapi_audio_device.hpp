@@ -80,11 +80,6 @@ class WasapiAudioDevice final : public AudioDevice {
   };
 
  private:
-  // Test-only peer used in `wasapi_audio_device_test.cpp` to seed the private
-  // COM state that `Open()` would normally populate, so public behavior can be
-  // exercised without real hardware.
-  friend class WasapiAudioDeviceTestPeer;
-
   template <typename T>
   using ComPtr = std::unique_ptr<T, ComRelease>;
 
