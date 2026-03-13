@@ -237,7 +237,7 @@ if(BUILD_TESTS)
 
         add_executable(audio_pipeline_test src/audio_pipeline_test.cpp)
         target_link_libraries(audio_pipeline_test PRIVATE
-            audio_pipeline GTest::gtest_main)
+            audio_pipeline GTest::gtest_main GTest::gmock)
         target_include_directories(audio_pipeline_test PRIVATE src)
         add_test(NAME audio_pipeline_test
                  COMMAND $<TARGET_FILE:audio_pipeline_test> --gtest_color=yes)
