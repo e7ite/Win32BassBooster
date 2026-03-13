@@ -159,6 +159,13 @@ if(WIN32)
         ole32 oleaut32 uuid mmdevapi)
     target_enable_clang_tidy(loopback_capture_activation)
 
+    add_library(wasapi_audio_device STATIC src/wasapi_audio_device.cpp)
+    target_include_directories(wasapi_audio_device PUBLIC src)
+    target_link_libraries(wasapi_audio_device PUBLIC
+        endpoint_audio_format loopback_capture_activation
+        ole32 oleaut32 uuid mmdevapi)
+    target_enable_clang_tidy(wasapi_audio_device)
+
     add_library(audio_pipeline STATIC src/audio_pipeline.cpp)
     target_include_directories(audio_pipeline PUBLIC src)
     target_link_libraries(audio_pipeline PUBLIC
