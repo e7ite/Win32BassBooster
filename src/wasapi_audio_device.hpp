@@ -28,6 +28,9 @@ class WasapiAudioDevice final : public AudioDevice {
   WasapiAudioDevice();
   // Allows construction with preconfigured clients, services, and format.
   // `format` follows the same `CoTaskMemFree` ownership convention as `Open()`.
+  // This exists so tests can cover the public contract without real hardware;
+  // the lower-coverage gap is still the real endpoint activation path in
+  // `Open()`, not the read/write/recovery behavior seeded here.
   explicit WasapiAudioDevice(Dependencies dependencies);
   ~WasapiAudioDevice() override;
 

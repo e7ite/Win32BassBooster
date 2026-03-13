@@ -1,4 +1,9 @@
 // WASAPI loopback capture and render device.
+// Coverage stays lower here than in `AudioPipeline` because the remaining gap
+// is the real COM and default-endpoint startup path. The tests cover the
+// public read, write, stop, and recovery contract without hardware, but fully
+// covering endpoint activation and client setup would require either live
+// hardware integration tests or deeper DI below `AudioDevice`.
 
 #include "wasapi_audio_device.hpp"
 
