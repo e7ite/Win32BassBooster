@@ -17,12 +17,14 @@
 #include <string>
 #include <thread>
 
+#include "audio_device.hpp"
 #include "audio_pipeline_interface.hpp"
 #include "bass_boost_filter.hpp"
 
 class AudioPipeline final : public AudioPipelineInterface {
  public:
   AudioPipeline();
+  explicit AudioPipeline(std::unique_ptr<AudioDevice> device);
   ~AudioPipeline() override;
 
   AudioPipeline(const AudioPipeline&) = delete;
@@ -67,6 +69,8 @@ class AudioPipeline final : public AudioPipelineInterface {
   };
 
  private:
+  std::unique_ptr<AudioDevice> device_;
+
   // Two-step init pattern required by COM factories: T* raw = nullptr;
   // factory(..., &raw); ptr.reset(raw).
   template <typename T>

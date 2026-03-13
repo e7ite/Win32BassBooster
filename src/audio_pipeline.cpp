@@ -20,6 +20,7 @@
 #include "bass_boost_filter.hpp"
 #include "endpoint_audio_format.hpp"
 #include "loopback_capture_activation.hpp"
+#include "wasapi_audio_device.hpp"
 
 namespace {
 
@@ -673,7 +674,11 @@ void RunAudioThreadLoop(RunningPipelineState& state, std::stop_token stoken) {
 
 }  // namespace
 
-AudioPipeline::AudioPipeline() = default;
+AudioPipeline::AudioPipeline()
+    : AudioPipeline(std::make_unique<WasapiAudioDevice>()) {}
+
+AudioPipeline::AudioPipeline(std::unique_ptr<AudioDevice> device)
+    : device_(std::move(device)) {}
 
 AudioPipeline::~AudioPipeline() { Stop(); }
 

@@ -170,7 +170,7 @@ if(WIN32)
     target_include_directories(audio_pipeline PUBLIC src)
     target_link_libraries(audio_pipeline PUBLIC
         endpoint_audio_format bass_boost_filter
-        loopback_capture_activation
+        loopback_capture_activation wasapi_audio_device
         ole32 oleaut32 uuid avrt mmdevapi)
     target_enable_clang_tidy(audio_pipeline)
 
