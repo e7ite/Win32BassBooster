@@ -20,6 +20,10 @@ class MockAudioDevice final : public AudioDevice {
     open_status_ = std::move(status);
   }
 
+  void SetStartStreamsStatus(AudioPipelineInterface::Status status) {
+    start_streams_status_ = std::move(status);
+  }
+
   void SetSampleRateHz(double sample_rate_hz) {
     sample_rate_hz_ = sample_rate_hz;
   }
@@ -34,7 +38,7 @@ class MockAudioDevice final : public AudioDevice {
   }
 
   AudioPipelineInterface::Status StartStreams() override {
-    return AudioPipelineInterface::Status::Ok();
+    return start_streams_status_;
   }
 
   void StopStreams() override {}
@@ -57,6 +61,7 @@ class MockAudioDevice final : public AudioDevice {
 
  private:
   AudioPipelineInterface::Status open_status_;
+  AudioPipelineInterface::Status start_streams_status_;
   double sample_rate_hz_ = 48000.0;
   std::wstring endpoint_name_ = L"Test Device";
   bool opened_ = false;
@@ -241,6 +246,27 @@ TEST(AudioPipelineTest, StartSucceedsWithInjectedDevice) {
   EXPECT_TRUE(pipeline.is_running());
   EXPECT_TRUE(device_ref.opened());
   EXPECT_EQ(pipeline.endpoint_name(), L"Configured Test Device");
+}
+
+TEST(AudioPipelineTest, StartStreamsFailureStopsPipeline) {
+  auto device = std::make_unique<MockAudioDevice>();
+  MockAudioDevice& device_ref = *device;
+  device->SetStartStreamsStatus(
+      AudioPipelineInterface::Status::Error(E_FAIL, L"Test start error"));
+  AudioPipeline pipeline(std::move(device));
+
+  const AudioPipelineInterface::Status status = pipeline.Start();
+
+  EXPECT_TRUE(status.ok());
+  EXPECT_TRUE(device_ref.opened());
+  for (int attempt = 0; attempt < 100 && pipeline.is_running(); ++attempt) {
+    Sleep(1);
+  }
+  EXPECT_FALSE(pipeline.is_running());
+
+  pipeline.Stop();
+
+  EXPECT_FALSE(device_ref.opened());
 }
 
 TEST(AudioPipelineTest, StartWhileRunningReturnsOk) {

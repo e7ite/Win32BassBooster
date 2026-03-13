@@ -13,10 +13,6 @@
 
 namespace {
 
-// 5 ms poll interval: 1/4 of the 20 ms buffer period. Keeps the capture queue
-// drained without burning CPU while staying well below the buffer duration.
-constexpr DWORD kPollIntervalMs = 5;
-
 [[nodiscard]] HRESULT ProcessAndRenderDevicePacket(CapturePacket& packet,
                                                    BassBoostFilter& filter,
                                                    AudioDevice& device) {
@@ -60,6 +56,11 @@ constexpr DWORD kPollIntervalMs = 5;
 void RunDeviceAudioThreadLoop(AudioDevice& device, BassBoostFilter& filter,
                               std::atomic<bool>& running,
                               std::stop_token stoken) {
+  // 5 ms poll interval: 1/4 of the 20 ms buffer period. Keeps the capture
+  // queue drained without burning CPU while staying well below the buffer
+  // duration.
+  constexpr DWORD kPollIntervalMs = 5;
+
   DWORD task_index = 0;
   HANDLE task =
       AvSetMmThreadCharacteristicsW(/*taskName=*/L"Pro Audio", &task_index);
