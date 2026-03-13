@@ -245,6 +245,16 @@ if(BUILD_TESTS)
                  COMMAND $<TARGET_FILE:audio_pipeline_test> --gtest_color=yes)
         target_enable_clang_tidy(audio_pipeline_test)
 
+        add_executable(wasapi_audio_device_test
+            src/wasapi_audio_device_test.cpp)
+        target_link_libraries(wasapi_audio_device_test PRIVATE
+            wasapi_audio_device GTest::gtest_main)
+        target_include_directories(wasapi_audio_device_test PRIVATE src)
+        add_test(NAME wasapi_audio_device_test
+                 COMMAND $<TARGET_FILE:wasapi_audio_device_test>
+                         --gtest_color=yes)
+        target_enable_clang_tidy(wasapi_audio_device_test)
+
         add_executable(theme_manager_test src/theme_manager_test.cpp)
         target_link_libraries(theme_manager_test PRIVATE
             theme_manager GTest::gtest_main GTest::gmock)
