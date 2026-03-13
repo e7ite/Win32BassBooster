@@ -17,6 +17,10 @@
 #include "endpoint_audio_format.hpp"
 #include "loopback_capture_activation.hpp"
 
+using endpoint_audio_format::DecodeToStereoFloat;
+using endpoint_audio_format::StereoPcmBuffer;
+using endpoint_audio_format::SupportsDirectStereoFloatCopy;
+
 namespace {
 
 template <typename T>
@@ -38,7 +42,7 @@ using ScopedWaveFormat =
 // layout the render path can write directly); returns an error otherwise.
 [[nodiscard]] AudioPipelineInterface::Status ValidateRenderMixFormat(
     const WAVEFORMATEX& render_format) {
-  if (endpoint_audio_format::SupportsDirectStereoFloatCopy(render_format)) {
+  if (SupportsDirectStereoFloatCopy(render_format)) {
     return AudioPipelineInterface::Status::Ok();
   }
   return AudioPipelineInterface::Status::Error(
@@ -423,9 +427,7 @@ CapturePacket WasapiAudioDevice::ReadNextPacket() {
   packet.silent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
 
   if (!packet.silent && frames > 0) {
-    endpoint_audio_format::StereoPcmBuffer buf =
-        endpoint_audio_format::DecodeToStereoFloat(capture_bytes, frames,
-                                                   *format_);
+    StereoPcmBuffer buf = DecodeToStereoFloat(capture_bytes, frames, *format_);
     packet.samples = std::move(buf.samples);
     packet.frames = buf.frames;
   }
