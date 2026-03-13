@@ -3,8 +3,9 @@
 
 #include "audio_pipeline.hpp"
 
-#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <future>
 #include <memory>
 #include <string>
 #include <utility>
@@ -15,6 +16,13 @@
 #include "gtest/gtest.h"
 
 namespace {
+
+using ::testing::_;
+using ::testing::AllOf;
+using ::testing::Each;
+using ::testing::Ge;
+using ::testing::Le;
+using ::testing::Return;
 
 class MockAudioDevice final : public AudioDevice {
  public:
@@ -34,16 +42,7 @@ class MockAudioDevice final : public AudioDevice {
     endpoint_name_ = std::move(endpoint_name);
   }
 
-  // Queues a packet to be returned by `ReadNextPacket`. Must be called before
-  // `Start()` to avoid racing with the audio thread.
-  void EnqueuePacket(CapturePacket packet) {
-    packets_.push_back(std::move(packet));
-  }
-
-  AudioPipelineInterface::Status Open() override {
-    opened_ = open_status_.ok();
-    return open_status_;
-  }
+  AudioPipelineInterface::Status Open() override { return open_status_; }
 
   AudioPipelineInterface::Status StartStreams() override {
     return start_streams_status_;
@@ -51,56 +50,24 @@ class MockAudioDevice final : public AudioDevice {
 
   void StopStreams() override {}
 
-  void Close() override { opened_ = false; }
+  void Close() override {}
 
-  // Returns queued packets in order, then empty packets once the queue is
-  // exhausted. Only called from the audio thread after `Start()`.
-  CapturePacket ReadNextPacket() override {
-    if (read_index_ >= packets_.size()) {
-      packets_drained_.store(true);
-      packets_drained_.notify_one();
-      return {};
-    }
-    return std::move(packets_[read_index_++]);
-  }
+  MOCK_METHOD(CapturePacket, ReadNextPacket, (), (override));
 
-  // Blocks until the audio thread has consumed all queued packets and hit the
-  // first empty read. Call after `Start()` and before `Stop()` to ensure the
-  // DSP path ran.
-  void WaitForPacketsDrained() { packets_drained_.wait(false); }
+  MOCK_METHOD(HRESULT, WriteRenderPacket, (std::span<const float> pcm),
+              (override));
 
-  // Captures the last rendered samples so tests can verify the DSP output
-  // after `Stop()` joins the audio thread.
-  HRESULT WriteRenderPacket(std::span<const float> pcm) override {
-    rendered_samples_.assign(pcm.begin(), pcm.end());
-    ++render_call_count_;
-    return S_OK;
-  }
-
-  bool TryRecover(HRESULT /*failure*/) override { return false; }
+  MOCK_METHOD(bool, TryRecover, (HRESULT failure), (override));
 
   double sample_rate() const override { return sample_rate_hz_; }
 
   const std::wstring& endpoint_name() const override { return endpoint_name_; }
-
-  [[nodiscard]] bool opened() const { return opened_; }
-  [[nodiscard]] int render_call_count() const { return render_call_count_; }
-  [[nodiscard]] const std::vector<float>& rendered_samples() const {
-    return rendered_samples_;
-  }
 
  private:
   AudioPipelineInterface::Status open_status_;
   AudioPipelineInterface::Status start_streams_status_;
   double sample_rate_hz_ = 48000.0;
   std::wstring endpoint_name_ = L"Test Device";
-  bool opened_ = false;
-
-  std::vector<CapturePacket> packets_;
-  size_t read_index_ = 0;
-  std::atomic<bool> packets_drained_ = false;
-  std::vector<float> rendered_samples_;
-  int render_call_count_ = 0;
 };
 
 TEST(AudioPipelineTest, NotRunningBeforeStart) {
@@ -272,21 +239,20 @@ TEST(AudioPipelineTest, StartFailsWhenDeviceOpenFails) {
 
 TEST(AudioPipelineTest, StartSucceedsWithInjectedDevice) {
   auto device = std::make_unique<MockAudioDevice>();
-  MockAudioDevice& device_ref = *device;
   device->SetEndpointName(L"Configured Test Device");
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillRepeatedly(Return(CapturePacket{}));
   AudioPipeline pipeline(std::move(device));
 
   const AudioPipelineInterface::Status status = pipeline.Start();
 
   EXPECT_TRUE(status.ok());
   EXPECT_TRUE(pipeline.is_running());
-  EXPECT_TRUE(device_ref.opened());
   EXPECT_EQ(pipeline.endpoint_name(), L"Configured Test Device");
 }
 
 TEST(AudioPipelineTest, StartStreamsFailureStopsPipeline) {
   auto device = std::make_unique<MockAudioDevice>();
-  MockAudioDevice& device_ref = *device;
   device->SetStartStreamsStatus(
       AudioPipelineInterface::Status::Error(E_FAIL, L"Test start error"));
   AudioPipeline pipeline(std::move(device));
@@ -295,11 +261,13 @@ TEST(AudioPipelineTest, StartStreamsFailureStopsPipeline) {
   pipeline.Stop();
 
   EXPECT_FALSE(pipeline.is_running());
-  EXPECT_FALSE(device_ref.opened());
 }
 
 TEST(AudioPipelineTest, StartWhileRunningReturnsOk) {
-  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
+  auto device = std::make_unique<MockAudioDevice>();
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillRepeatedly(Return(CapturePacket{}));
+  AudioPipeline pipeline(std::move(device));
   ASSERT_TRUE(pipeline.Start().ok());
 
   const AudioPipelineInterface::Status second_start = pipeline.Start();
@@ -309,7 +277,10 @@ TEST(AudioPipelineTest, StartWhileRunningReturnsOk) {
 }
 
 TEST(AudioPipelineTest, BoostLevelUpdatesWhileRunning) {
-  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
+  auto device = std::make_unique<MockAudioDevice>();
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillRepeatedly(Return(CapturePacket{}));
+  AudioPipeline pipeline(std::move(device));
   ASSERT_TRUE(pipeline.Start().ok());
 
   pipeline.SetBoostLevel(1.0);
@@ -319,8 +290,9 @@ TEST(AudioPipelineTest, BoostLevelUpdatesWhileRunning) {
 
 TEST(AudioPipelineTest, StopAfterStartCleansUpResources) {
   auto device = std::make_unique<MockAudioDevice>();
-  MockAudioDevice& device_ref = *device;
   device->SetEndpointName(L"Configured Test Device");
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillRepeatedly(Return(CapturePacket{}));
   AudioPipeline pipeline(std::move(device));
 
   ASSERT_TRUE(pipeline.Start().ok());
@@ -329,71 +301,110 @@ TEST(AudioPipelineTest, StopAfterStartCleansUpResources) {
   pipeline.Stop();
 
   EXPECT_FALSE(pipeline.is_running());
-  EXPECT_FALSE(device_ref.opened());
   EXPECT_EQ(pipeline.endpoint_name(), L"Configured Test Device");
 }
 
 TEST(AudioPipelineTest, NonSilentPacketIsProcessedAndRendered) {
   auto device = std::make_unique<MockAudioDevice>();
-  MockAudioDevice& device_ref = *device;
+  std::promise<void> queue_drained;
+  std::future<void> queue_drained_future = queue_drained.get_future();
+  int render_call_count = 0;
   CapturePacket packet;
   packet.frames = 2;
   packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
-  device->EnqueuePacket(std::move(packet));
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(packet))
+      .WillOnce([&queue_drained] {
+        queue_drained.set_value();
+        return CapturePacket{};
+      });
+  EXPECT_CALL(*device, WriteRenderPacket(_))
+      .WillOnce([&render_call_count](std::span<const float> /*pcm*/) {
+        ++render_call_count;
+        return S_OK;
+      });
   AudioPipeline pipeline(std::move(device));
   pipeline.SetBoostLevel(1.0);
 
   ASSERT_TRUE(pipeline.Start().ok());
-  device_ref.WaitForPacketsDrained();
+  ASSERT_EQ(queue_drained_future.wait_for(std::chrono::seconds(1)),
+            std::future_status::ready);
   pipeline.Stop();
 
-  EXPECT_GT(device_ref.render_call_count(), 0);
+  EXPECT_GT(render_call_count, 0);
 }
 
 TEST(AudioPipelineTest, SilentPacketIsNotRendered) {
   auto device = std::make_unique<MockAudioDevice>();
-  MockAudioDevice& device_ref = *device;
+  std::promise<void> queue_drained;
+  std::future<void> queue_drained_future = queue_drained.get_future();
   CapturePacket packet;
   packet.frames = 2;
   packet.silent = true;
   packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
-  device->EnqueuePacket(std::move(packet));
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(packet))
+      .WillOnce([&queue_drained] {
+        queue_drained.set_value();
+        return CapturePacket{};
+      });
+  EXPECT_CALL(*device, WriteRenderPacket(_)).Times(0);
   AudioPipeline pipeline(std::move(device));
 
   ASSERT_TRUE(pipeline.Start().ok());
-  device_ref.WaitForPacketsDrained();
+  ASSERT_EQ(queue_drained_future.wait_for(std::chrono::seconds(1)),
+            std::future_status::ready);
   pipeline.Stop();
-
-  EXPECT_EQ(device_ref.render_call_count(), 0);
 }
 
 TEST(AudioPipelineTest, RenderedDeltaIsClamped) {
   auto device = std::make_unique<MockAudioDevice>();
-  MockAudioDevice& device_ref = *device;
+  std::promise<void> queue_drained;
+  std::future<void> queue_drained_future = queue_drained.get_future();
+  std::vector<float> rendered_samples;
   CapturePacket packet;
   packet.frames = 2;
   packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
-  device->EnqueuePacket(std::move(packet));
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(packet))
+      .WillOnce([&queue_drained] {
+        queue_drained.set_value();
+        return CapturePacket{};
+      });
+  EXPECT_CALL(*device, WriteRenderPacket(_))
+      .WillOnce([&rendered_samples](std::span<const float> pcm) {
+        rendered_samples.assign(pcm.begin(), pcm.end());
+        return S_OK;
+      });
   AudioPipeline pipeline(std::move(device));
   pipeline.SetBoostLevel(1.0);
 
   ASSERT_TRUE(pipeline.Start().ok());
-  device_ref.WaitForPacketsDrained();
+  ASSERT_EQ(queue_drained_future.wait_for(std::chrono::seconds(1)),
+            std::future_status::ready);
   pipeline.Stop();
 
-  EXPECT_THAT(device_ref.rendered_samples(),
-              ::testing::Each(
-                  ::testing::AllOf(::testing::Ge(-1.0F), ::testing::Le(1.0F))));
+  EXPECT_THAT(rendered_samples,
+              Each(AllOf(Ge(-1.0F), Le(1.0F))));
 }
 
 TEST(AudioPipelineTest, FailedReadWithoutRecoveryStopsPipeline) {
   auto device = std::make_unique<MockAudioDevice>();
+  std::promise<void> recover_attempted;
+  std::future<void> recover_attempted_future = recover_attempted.get_future();
   CapturePacket failed_packet;
   failed_packet.status = E_FAIL;
-  device->EnqueuePacket(std::move(failed_packet));
+  EXPECT_CALL(*device, ReadNextPacket()).WillOnce(Return(failed_packet));
+  EXPECT_CALL(*device, TryRecover(E_FAIL))
+      .WillOnce([&recover_attempted](HRESULT /*failure*/) {
+        recover_attempted.set_value();
+        return false;
+      });
   AudioPipeline pipeline(std::move(device));
 
   ASSERT_TRUE(pipeline.Start().ok());
+  ASSERT_EQ(recover_attempted_future.wait_for(std::chrono::seconds(1)),
+            std::future_status::ready);
   pipeline.Stop();
 
   EXPECT_FALSE(pipeline.is_running());
