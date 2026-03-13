@@ -25,12 +25,17 @@ using ScopedComPtr = std::unique_ptr<T, WasapiAudioDevice::ComRelease>;
 using ScopedWaveFormat =
     std::unique_ptr<WAVEFORMATEX, WasapiAudioDevice::CoTaskMemFreeDeleter>;
 
+// Returns true when `failure` indicates the endpoint or session was invalidated
+// but a fresh client pair on the current default device may succeed; returns
+// false for all other failures.
 [[nodiscard]] bool IsRecoverableStreamFailure(HRESULT failure) {
   return failure == AUDCLNT_E_DEVICE_INVALIDATED ||
          failure == AUDCLNT_E_RESOURCES_INVALIDATED ||
          failure == AUDCLNT_E_SERVICE_NOT_RUNNING;
 }
 
+// Returns `Ok` when the render mix format is packed float32 stereo (the only
+// layout the render path can write directly); returns an error otherwise.
 [[nodiscard]] AudioPipelineInterface::Status ValidateRenderMixFormat(
     const WAVEFORMATEX& render_format) {
   if (endpoint_audio_format::SupportsDirectStereoFloatCopy(render_format)) {
@@ -42,6 +47,8 @@ using ScopedWaveFormat =
       L"conversion path is unavailable");
 }
 
+// Initializes the audio client in shared mode for rendering. Returns `Ok` on
+// success; otherwise returns the failing HRESULT.
 [[nodiscard]] AudioPipelineInterface::Status InitializeRenderClient(
     IAudioClient& audio_client, WAVEFORMATEX* render_format) {
   // 20 ms is the lowest buffer duration that avoids glitches on most Windows
@@ -61,6 +68,8 @@ using ScopedWaveFormat =
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Queries the `IAudioRenderClient` service from an initialized audio client.
+// Returns `Ok` on success; otherwise returns the failing HRESULT.
 [[nodiscard]] AudioPipelineInterface::Status AcquireRenderClientService(
     IAudioClient& audio_client, IAudioRenderClient*& raw_audio_render_client) {
   if (const HRESULT render_service = audio_client.GetService(
@@ -73,6 +82,11 @@ using ScopedWaveFormat =
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Initializes the audio client in shared mode for loopback capture. The
+// process loopback activation selects which audio is captured, but the stream
+// flag `AUDCLNT_STREAMFLAGS_LOOPBACK` is still required. Buffer duration 0
+// lets WASAPI choose the optimal size for process loopback. Returns `Ok` on
+// success; otherwise returns the failing HRESULT.
 [[nodiscard]] AudioPipelineInterface::Status InitializeCaptureClient(
     IAudioClient& audio_client, WAVEFORMATEX* capture_format) {
   if (const HRESULT initialize_capture = audio_client.Initialize(
@@ -87,6 +101,8 @@ using ScopedWaveFormat =
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Queries the `IAudioCaptureClient` service from an initialized audio client.
+// Returns `Ok` on success; otherwise returns the failing HRESULT.
 [[nodiscard]] AudioPipelineInterface::Status AcquireCaptureClientService(
     IAudioClient& audio_client,
     IAudioCaptureClient*& raw_audio_capture_client) {
@@ -100,6 +116,8 @@ using ScopedWaveFormat =
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Initializes the capture client and acquires its capture service in one step.
+// Returns `Ok` on success; otherwise returns the first failing status.
 [[nodiscard]] AudioPipelineInterface::Status InitializeCaptureStream(
     IAudioClient& audio_client, WAVEFORMATEX* capture_format,
     IAudioCaptureClient*& raw_audio_capture_client) {
@@ -111,6 +129,9 @@ using ScopedWaveFormat =
   return AcquireCaptureClientService(audio_client, raw_audio_capture_client);
 }
 
+// Writes the friendly name of `render_device` into `endpoint_name`. Falls back
+// to "Default Render Device" when the property store is unavailable or the name
+// is empty.
 void ReadEndpointName(IMMDevice* render_device, std::wstring& endpoint_name) {
   if (render_device == nullptr) {
     endpoint_name = L"Default Render Device";
@@ -136,6 +157,8 @@ void ReadEndpointName(IMMDevice* render_device, std::wstring& endpoint_name) {
   }
 }
 
+// Result of acquiring the default render endpoint. On failure, `status` carries
+// the failing HRESULT and message; the remaining fields are empty.
 struct EndpointAcquisition {
   AudioPipelineInterface::Status status;
   ScopedComPtr<IMMDeviceEnumerator> enumerator;
@@ -143,6 +166,7 @@ struct EndpointAcquisition {
   std::wstring endpoint_name;
 };
 
+// Returns the current default render endpoint and its friendly name.
 [[nodiscard]] EndpointAcquisition AcquireEndpoint() {
   EndpointAcquisition endpoint;
 
@@ -173,17 +197,31 @@ struct EndpointAcquisition {
   return endpoint;
 }
 
+// WASAPI render client, its buffer-writing service, and the negotiated mix
+// format, paired so they can be set up together and moved into the device as a
+// unit.
 struct RenderClientSetup {
+  // Owns the render stream configuration and lifetime.
   ScopedComPtr<IAudioClient> audio_client;
+  // Writes processed frames into the render buffer owned by `audio_client`.
   ScopedComPtr<IAudioRenderClient> service;
+  // Negotiated mix format; also used as the capture format because process
+  // loopback captures in whatever format the render endpoint uses.
   ScopedWaveFormat format;
 };
 
+// WASAPI loopback capture client and its packet-pulling service, paired so they
+// can be set up together and moved into the device as a unit.
 struct CaptureClientSetup {
+  // Owns the loopback stream configuration and lifetime.
   ScopedComPtr<IAudioClient> audio_client;
+  // Pulls captured packets from `audio_client`.
   ScopedComPtr<IAudioCaptureClient> service;
 };
 
+// Activates a shared-mode render client on `render_device`, validates the mix
+// format is float32 stereo, and initializes the render stream. Populates
+// `setup` on success; returns the first failing status otherwise.
 [[nodiscard]] AudioPipelineInterface::Status SetupRenderClient(
     IMMDevice& render_device, RenderClientSetup& setup) {
   IAudioClient* raw_render = nullptr;
@@ -227,6 +265,9 @@ struct CaptureClientSetup {
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Activates a loopback capture client using the process loopback API and
+// initializes it with `render_format`. Populates `setup` on success; returns
+// the first failing status otherwise.
 [[nodiscard]] AudioPipelineInterface::Status SetupCaptureClient(
     WAVEFORMATEX* render_format, CaptureClientSetup& setup) {
   IAudioClient* raw_capture = nullptr;
@@ -248,11 +289,16 @@ struct CaptureClientSetup {
   return AudioPipelineInterface::Status::Ok();
 }
 
+// Combined capture and render setup, built during startup and recovery then
+// moved into the device's long-lived members.
 struct StreamClientSetup {
   CaptureClientSetup capture;
   RenderClientSetup render;
 };
 
+// Sets up the render client first (to obtain the mix format), then activates
+// the process loopback capture client using that same format. Returns `Ok`
+// when both clients are ready; returns the first failing status otherwise.
 [[nodiscard]] AudioPipelineInterface::Status SetupStreamClients(
     IMMDevice& render_device, StreamClientSetup& clients) {
   if (const AudioPipelineInterface::Status render =
@@ -450,7 +496,12 @@ bool WasapiAudioDevice::TryRecover(HRESULT failure) {
   return SUCCEEDED(render_client_->Start());
 }
 
-double WasapiAudioDevice::sample_rate() const { return 0.0; }
+double WasapiAudioDevice::sample_rate() const {
+  if (format_ == nullptr) {
+    return 0.0;
+  }
+  return static_cast<double>(format_->nSamplesPerSec);
+}
 
 const std::wstring& WasapiAudioDevice::endpoint_name() const {
   return endpoint_name_;

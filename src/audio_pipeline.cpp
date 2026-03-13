@@ -13,6 +13,10 @@
 
 namespace {
 
+// Processes one captured packet: copies the original, applies the bass boost
+// filter, computes the delta (filter output - original), and writes only the
+// added bass energy to the render device. Returns `S_OK` on success or when
+// the packet is silent/empty; otherwise returns the failing HRESULT.
 [[nodiscard]] HRESULT ProcessAndRenderDevicePacket(CapturePacket& packet,
                                                    BassBoostFilter& filter,
                                                    AudioDevice& device) {
@@ -32,6 +36,9 @@ namespace {
   return device.WriteRenderPacket(packet.samples);
 }
 
+// Drains all pending capture packets through the DSP chain. Returns `S_OK`
+// when the queue is empty or stop was requested; otherwise returns the first
+// failing HRESULT.
 [[nodiscard]] HRESULT DrainDeviceQueue(AudioDevice& device,
                                        BassBoostFilter& filter,
                                        std::stop_token stoken) {
@@ -53,6 +60,9 @@ namespace {
   return S_OK;
 }
 
+// Audio thread entry point. Registers for MMCSS priority, starts streams, and
+// polls the capture queue until stop is requested or an unrecoverable failure
+// occurs.
 void RunDeviceAudioThreadLoop(AudioDevice& device, BassBoostFilter& filter,
                               std::atomic<bool>& running,
                               std::stop_token stoken) {
@@ -110,8 +120,7 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
     return AudioPipelineInterface::Status::Ok();
   }
 
-  if (const AudioPipelineInterface::Status open = device_->Open();
-      !open.ok()) {
+  if (const AudioPipelineInterface::Status open = device_->Open(); !open.ok()) {
     return open;
   }
 

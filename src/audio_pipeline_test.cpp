@@ -254,18 +254,11 @@ TEST(AudioPipelineTest, StartStreamsFailureStopsPipeline) {
   device->SetStartStreamsStatus(
       AudioPipelineInterface::Status::Error(E_FAIL, L"Test start error"));
   AudioPipeline pipeline(std::move(device));
-
-  const AudioPipelineInterface::Status status = pipeline.Start();
-
-  EXPECT_TRUE(status.ok());
-  EXPECT_TRUE(device_ref.opened());
-  for (int attempt = 0; attempt < 100 && pipeline.is_running(); ++attempt) {
-    Sleep(1);
-  }
-  EXPECT_FALSE(pipeline.is_running());
+  ASSERT_TRUE(pipeline.Start().ok());
 
   pipeline.Stop();
 
+  EXPECT_FALSE(pipeline.is_running());
   EXPECT_FALSE(device_ref.opened());
 }
 

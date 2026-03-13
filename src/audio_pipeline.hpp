@@ -18,7 +18,9 @@
 
 class AudioPipeline final : public AudioPipelineInterface {
  public:
+  // Creates a pipeline with a `WasapiAudioDevice` for production use.
   AudioPipeline();
+  // Takes ownership of `device`; the device provides all audio I/O.
   explicit AudioPipeline(std::unique_ptr<AudioDevice> device);
   ~AudioPipeline() override;
 
