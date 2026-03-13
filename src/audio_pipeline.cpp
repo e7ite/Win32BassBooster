@@ -13,6 +13,30 @@
 
 namespace {
 
+// Keeps the MMCSS registration scoped to the audio thread lifetime so the main
+// loop does not need to carry a nullable AVRT handle through every exit path.
+class ScopedMmThreadCharacteristics final {
+ public:
+  explicit ScopedMmThreadCharacteristics(const wchar_t* task_name) {
+    DWORD task_index = 0;
+    handle_ = AvSetMmThreadCharacteristicsW(task_name, &task_index);
+  }
+
+  ~ScopedMmThreadCharacteristics() {
+    if (handle_ != nullptr) {
+      AvRevertMmThreadCharacteristics(handle_);
+    }
+  }
+
+  ScopedMmThreadCharacteristics(const ScopedMmThreadCharacteristics&) = delete;
+  ScopedMmThreadCharacteristics& operator=(
+      const ScopedMmThreadCharacteristics&) = delete;
+
+ private:
+  // Opaque AVRT registration handle; null when MMCSS registration fails.
+  HANDLE handle_ = nullptr;
+};
+
 // Processes one captured packet: copies the original, applies the bass boost
 // filter, computes the delta (filter output - original), and writes only the
 // added bass energy to the render device. Returns `S_OK` on success or when
@@ -40,8 +64,8 @@ namespace {
 // when the queue is empty or stop was requested; otherwise returns the first
 // failing HRESULT.
 [[nodiscard]] HRESULT DrainDeviceQueue(AudioDevice& device,
-                                       BassBoostFilter& filter,
-                                       std::stop_token stoken) {
+                                       std::stop_token stoken,
+                                       BassBoostFilter& filter) {
   while (!stoken.stop_requested()) {
     CapturePacket packet = device.ReadNextPacket();
     if (FAILED(packet.status)) {
@@ -63,29 +87,24 @@ namespace {
 // Audio thread entry point. Registers for MMCSS priority, starts streams, and
 // polls the capture queue until stop is requested or an unrecoverable failure
 // occurs.
-void RunDeviceAudioThreadLoop(AudioDevice& device, BassBoostFilter& filter,
-                              std::atomic<bool>& running,
-                              std::stop_token stoken) {
+void RunDeviceAudioThreadLoop(AudioDevice& device, std::stop_token stoken,
+                              BassBoostFilter& filter,
+                              std::atomic<bool>& running) {
   // 5 ms poll interval: 1/4 of the 20 ms buffer period. Keeps the capture
   // queue drained without burning CPU while staying well below the buffer
   // duration.
   constexpr DWORD kPollIntervalMs = 5;
 
-  DWORD task_index = 0;
-  HANDLE task =
-      AvSetMmThreadCharacteristicsW(/*taskName=*/L"Pro Audio", &task_index);
+  const ScopedMmThreadCharacteristics pro_audio_task(L"Pro Audio");
 
   const AudioPipelineInterface::Status start = device.StartStreams();
   if (!start.ok()) {
     running.store(false);
-    if (task != nullptr) {
-      AvRevertMmThreadCharacteristics(task);
-    }
     return;
   }
 
   while (!stoken.stop_requested()) {
-    const HRESULT drain = DrainDeviceQueue(device, filter, stoken);
+    const HRESULT drain = DrainDeviceQueue(device, stoken, filter);
     if (FAILED(drain) && !device.TryRecover(drain)) {
       break;
     }
@@ -100,9 +119,6 @@ void RunDeviceAudioThreadLoop(AudioDevice& device, BassBoostFilter& filter,
 
   device.StopStreams();
   running.store(false);
-  if (task != nullptr) {
-    AvRevertMmThreadCharacteristics(task);
-  }
 }
 
 }  // namespace
@@ -129,7 +145,7 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
   running_.store(true);
 
   audio_thread_ = std::jthread([this](std::stop_token stoken) {
-    RunDeviceAudioThreadLoop(*device_, filter_, running_, std::move(stoken));
+    RunDeviceAudioThreadLoop(*device_, std::move(stoken), filter_, running_);
   });
   return AudioPipelineInterface::Status::Ok();
 }
@@ -139,7 +155,6 @@ void AudioPipeline::Stop() {
   if (audio_thread_.joinable()) {
     audio_thread_.join();
   }
-  device_->StopStreams();
   device_->Close();
   running_.store(false);
 }
