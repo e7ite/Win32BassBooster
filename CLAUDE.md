@@ -931,6 +931,16 @@ class MainWindow { ... };
 - Keep commits small and single-purpose (target: <=100 changed lines when
   practical).
 - Include corresponding tests in the same commit as behavior changes.
+- Never refer to deleted, squashed, or rewritten-away commits in later commit
+  messages, PR text, or documentation. If history changes, rewrite later
+  commit messages too so every commit reference still exists in visible
+  history.
+- In commit messages, follow the same identifier-marking rule used in code
+  comments: wrap real identifiers, file paths, commands, APIs, and test names
+  in backticks.
+- Never run `git push` unless the user explicitly asks for that step in the
+  current conversation. A request to fix, finish, or commit work is not
+  permission to push.
 - Commit messages should include:
   - Why the change is needed, such as what would happen if not added.
   - Main alternatives considered and why they were not chosen.
@@ -969,13 +979,77 @@ Alternatives considered:
 - Runtime polymorphism in hot loop (rejected: extra indirection cost).
 ```
 
+```text
+Bad commit message:
+Follow up to abc1234 after the rebase.
+
+Why:
+- FakeAudioDevice replaces the live-device dependency in
+  audio_pipeline_test.cpp.
+
+Good commit message:
+Follow up to `1234abcd` in current history.
+
+Why:
+- `FakeAudioDevice` replaces the live-device dependency in
+  `audio_pipeline_test.cpp`.
+```
+
+```text
+Bad:
+- Fix the branch, then run git push origin main without asking.
+
+Good:
+- Fix the branch, then ask whether to run `git push origin main`.
+```
+
 ### Testing
-- Every new source file (`*.cpp` / `*.hpp`) must have a corresponding
-  `*_test.cpp`. Add the test file and CMake wiring in the same change that
-  introduces the source file. If the module's public API touches hardware or
-  COM, test the observable contract (status codes, output pointer state,
-  error messages) by calling the real function under controlled conditions
-  (for example, COM initialized vs. uninitialized).
+- When production code collaborates with OS APIs, service APIs, device APIs,
+  filesystems, clocks, threads, process state, or other environment-bound
+  behavior, first prefer extracting a dependency injection seam and testing
+  against a controllable test double. Use a focused integration test only when
+  the real boundary is itself part of the contract under test.
+- Every new behavior-owning source file should have corresponding test
+  coverage in the same change, including the needed `*_test.cpp` and CMake
+  wiring when a standalone test target is the clearest fit. Do not add
+  placeholder tests for pure abstract interfaces, passive transfer types, or
+  declaration-only headers with no behavior; cover those through the concrete
+  modules and contract tests that exercise them. If the module's public API is
+  a thin wrapper around hardware, COM, or another system boundary, add at
+  least one focused test of the observable contract (status codes, output
+  pointer state, error messages) under controlled conditions.
+- Never remove, disable, or weaken a test to make CI pass. A failing test is a
+  signal to fix production code, fix the test environment, or add the missing
+  seam or test double -- not to delete the coverage.
+
+```cpp
+// Bad: test adds control flow to adapt to runtime environment details.
+TEST(PipelineTest, StartSucceeds) {
+  AudioPipeline pipeline;
+  const auto status = pipeline.Start();
+  if (!status.ok()) {
+    EXPECT_TRUE(FAILED(status.code));
+    return;  // silently passes without testing the contract
+  }
+  EXPECT_TRUE(pipeline.is_running());
+}
+
+// Bad: test removed because it failed in one environment.
+
+// Good: inject a test double so the contract stays deterministic.
+class MockAudioDevice {
+ public:
+  std::unique_ptr<AudioDevice> CreateAudioDevice();
+  void set_open_succeeds(bool succeeds);
+};
+
+TEST(AudioPipelineTest, StartSucceedsWithInjectedDevice) {
+  MockAudioDevice device;
+  AudioPipeline pipeline(device.CreateAudioDevice());
+  ASSERT_TRUE(pipeline.Start().ok());
+  EXPECT_TRUE(pipeline.is_running());
+}
+```
 - Prefer `TEST()` over `TEST_F()`. Only use a fixture when `SetUp()` and
   `TearDown()` genuinely manage a resource lifecycle (for example, creating and
   destroying a real Win32 window). Sharing a constant or a trivially
