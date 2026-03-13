@@ -769,6 +769,7 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
     return open;
   }
 
+  endpoint_name_ = device_->endpoint_name();
   filter_.SetSampleRate(device_->sample_rate());
   running_.store(true);
 

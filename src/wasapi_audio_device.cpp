@@ -333,7 +333,6 @@ void WasapiAudioDevice::Close() {
   format_ = nullptr;
   render_device_ = nullptr;
   enumerator_ = nullptr;
-  endpoint_name_.clear();
 }
 
 CapturePacket WasapiAudioDevice::ReadNextPacket() {
