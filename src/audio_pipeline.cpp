@@ -38,6 +38,83 @@ constexpr DWORD kPollsPerBuffer = 4;
 constexpr DWORD kPollIntervalMs =
     static_cast<DWORD>(k20Ms / kHundredNsPerMs / kPollsPerBuffer);
 
+[[nodiscard]] HRESULT ProcessAndRenderDevicePacket(CapturePacket& packet,
+                                                   BassBoostFilter& filter,
+                                                   AudioDevice& device) {
+  if (packet.silent || packet.frames == 0) {
+    return S_OK;
+  }
+
+  const std::vector<float> original(packet.samples.begin(),
+                                    packet.samples.end());
+  filter.ProcessStereo(packet.samples);
+
+  for (size_t i = 0; i < packet.samples.size(); ++i) {
+    packet.samples[i] =
+        std::clamp(packet.samples[i] - original[i], -1.0F, 1.0F);
+  }
+
+  return device.WriteRenderPacket(packet.samples);
+}
+
+[[nodiscard]] HRESULT DrainDeviceQueue(AudioDevice& device,
+                                       BassBoostFilter& filter,
+                                       std::stop_token stoken) {
+  while (!stoken.stop_requested()) {
+    CapturePacket packet = device.ReadNextPacket();
+    if (FAILED(packet.status)) {
+      return packet.status;
+    }
+    if (packet.frames == 0) {
+      break;
+    }
+
+    if (const HRESULT process =
+            ProcessAndRenderDevicePacket(packet, filter, device);
+        FAILED(process)) {
+      return process;
+    }
+  }
+  return S_OK;
+}
+
+void RunDeviceAudioThreadLoop(AudioDevice& device, BassBoostFilter& filter,
+                              std::atomic<bool>& running,
+                              std::stop_token stoken) {
+  DWORD task_index = 0;
+  HANDLE task =
+      AvSetMmThreadCharacteristicsW(/*taskName=*/L"Pro Audio", &task_index);
+
+  const AudioPipelineInterface::Status start = device.StartStreams();
+  if (!start.ok()) {
+    running.store(false);
+    if (task != nullptr) {
+      AvRevertMmThreadCharacteristics(task);
+    }
+    return;
+  }
+
+  while (!stoken.stop_requested()) {
+    const HRESULT drain = DrainDeviceQueue(device, filter, stoken);
+    if (FAILED(drain) && !device.TryRecover(drain)) {
+      break;
+    }
+
+    if (FAILED(drain)) {
+      filter.SetSampleRate(device.sample_rate());
+      continue;
+    }
+
+    Sleep(kPollIntervalMs);
+  }
+
+  device.StopStreams();
+  running.store(false);
+  if (task != nullptr) {
+    AvRevertMmThreadCharacteristics(task);
+  }
+}
+
 template <typename T>
 using ScopedComPtr = std::unique_ptr<T, AudioPipeline::ComRelease>;
 
@@ -687,55 +764,16 @@ AudioPipelineInterface::Status AudioPipeline::Start() {
     return AudioPipelineInterface::Status::Ok();
   }
 
-  const bool needs_pipeline_init =
-      enumerator_ == nullptr || render_device_ == nullptr;
-  EndpointAcquisition endpoint;
-  if (needs_pipeline_init) {
-    endpoint = AcquireEndpoint();
-    if (!endpoint.status.ok()) {
-      return endpoint.status;
-    }
+  if (const AudioPipelineInterface::Status open = device_->Open();
+      !open.ok()) {
+    return open;
   }
 
-  IMMDevice& render_device =
-      needs_pipeline_init ? *endpoint.render_device : *render_device_;
-
-  StreamClientSetup clients;
-  if (const AudioPipelineInterface::Status status =
-          SetupStreamClients(render_device, clients);
-      !status.ok()) {
-    return status;
-  }
-
-  const double sample_rate =
-      static_cast<double>(clients.render.format->nSamplesPerSec);
-  filter_.SetSampleRate(sample_rate);
-
-  if (needs_pipeline_init) {
-    enumerator_ = std::move(endpoint.enumerator);
-    render_device_ = std::move(endpoint.render_device);
-    endpoint_name_ = std::move(endpoint.endpoint_name);
-  }
-  capture_client_ = std::move(clients.capture.audio_client);
-  capture_service_ = std::move(clients.capture.service);
-  render_client_ = std::move(clients.render.audio_client);
-  render_service_ = std::move(clients.render.service);
-  render_format_ = std::move(clients.render.format);
-
+  filter_.SetSampleRate(device_->sample_rate());
   running_.store(true);
 
   audio_thread_ = std::jthread([this](std::stop_token stoken) {
-    RunningPipelineState state{.enumerator = enumerator_,
-                               .render_device = render_device_,
-                               .capture_client = capture_client_,
-                               .render_client = render_client_,
-                               .capture_service = capture_service_,
-                               .render_service = render_service_,
-                               .render_format = render_format_,
-                               .filter = filter_,
-                               .running = running_,
-                               .endpoint_name = endpoint_name_};
-    RunAudioThreadLoop(state, std::move(stoken));
+    RunDeviceAudioThreadLoop(*device_, filter_, running_, std::move(stoken));
   });
   return AudioPipelineInterface::Status::Ok();
 }
@@ -745,7 +783,7 @@ void AudioPipeline::Stop() {
   if (audio_thread_.joinable()) {
     audio_thread_.join();
   }
-  StopClientsAndFinalizeIfReady(capture_client_.get(), render_client_.get(),
-                                running_,
-                                /*task=*/nullptr);
+  device_->StopStreams();
+  device_->Close();
+  running_.store(false);
 }

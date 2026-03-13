@@ -41,7 +41,7 @@ class AudioPipeline final : public AudioPipelineInterface {
   [[nodiscard]] bool is_running() const noexcept { return running_.load(); }
   [[nodiscard]] double gain_db() const override { return filter_.gain_db(); }
   [[nodiscard]] const std::wstring& endpoint_name() const override {
-    return endpoint_name_;
+    return device_->endpoint_name();
   }
 
   // Public because anonymous-namespace helpers in `audio_pipeline.cpp` reuse
