@@ -10,28 +10,25 @@
 #include <string>
 
 #include "audio_pipeline_interface.hpp"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace {
 
-class MockAudioPipeline : public AudioPipelineInterface {
+using ::testing::DoubleNear;
+
+class MockAudioPipeline final : public AudioPipelineInterface {
  public:
   [[nodiscard]] AudioPipelineInterface::Status Start() override { return {}; }
   void Stop() override {}
 
-  void SetBoostLevel(double level) override {
-    last_boost_level_ = level;
-    ++set_level_count_;
-  }
+  MOCK_METHOD(void, SetBoostLevel, (double level), (override));
 
   [[nodiscard]] double gain_db() const override { return 0.0; }
 
   [[nodiscard]] const std::wstring& endpoint_name() const override {
     return name_;
   }
-
-  double last_boost_level_ = -1.0;
-  int set_level_count_ = 0;
 
  private:
   std::wstring name_ = L"Test Device";
@@ -52,7 +49,6 @@ class MainWindowLiveTest : public ::testing::Test {
  protected:
   void SetUp() override {
     pipeline_ = std::make_unique<MockAudioPipeline>();
-    pipeline_observer_ = pipeline_.get();
     window_ = std::make_unique<MainWindow>(pipeline_.get());
     window_created_ =
         window_->Create(GetModuleHandleW(/*lpModuleName=*/nullptr), SW_HIDE);
@@ -72,7 +68,6 @@ class MainWindowLiveTest : public ::testing::Test {
 
   std::unique_ptr<MockAudioPipeline> pipeline_;
   std::unique_ptr<MainWindow> window_;
-  MockAudioPipeline* pipeline_observer_ = nullptr;
   bool window_created_ = false;
 };
 
@@ -103,13 +98,11 @@ TEST_F(MainWindowLiveTest, HScrollMessageUpdatesBoostLevel) {
 
   const int midpoint = (slider_min + slider_max) / 2;
 
+  EXPECT_CALL(*pipeline_, SetBoostLevel(DoubleNear(0.5, 1e-6))).Times(1);
   SendMessageW(slider, TBM_SETPOS, TRUE, midpoint);
   SendMessageW(window_->hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, midpoint),
                reinterpret_cast<LPARAM>(slider));
-
-  EXPECT_EQ(pipeline_observer_->set_level_count_, 1);
-  EXPECT_NEAR(pipeline_observer_->last_boost_level_, 0.5, 1e-6);
 }
 
 TEST_F(MainWindowLiveTest, WindowHandleIsValid) {
@@ -133,13 +126,11 @@ TEST_F(MainWindowLiveTest, SliderAtMinSetsZeroBoost) {
   const int slider_min = static_cast<int>(
       SendMessageW(slider, TBM_GETRANGEMIN, /*wParam=*/0, /*lParam=*/0));
 
+  EXPECT_CALL(*pipeline_, SetBoostLevel(DoubleNear(0.0, 1e-6))).Times(1);
   SendMessageW(slider, TBM_SETPOS, TRUE, slider_min);
   SendMessageW(window_->hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, slider_min),
                reinterpret_cast<LPARAM>(slider));
-
-  // Slider at min (leftmost) maps to zero boost (level ~= 0.0).
-  EXPECT_NEAR(pipeline_observer_->last_boost_level_, 0.0, 1e-6);
 }
 
 TEST_F(MainWindowLiveTest, SliderAtMaxSetsMaxBoost) {
@@ -151,13 +142,11 @@ TEST_F(MainWindowLiveTest, SliderAtMaxSetsMaxBoost) {
   const int slider_max = static_cast<int>(
       SendMessageW(slider, TBM_GETRANGEMAX, /*wParam=*/0, /*lParam=*/0));
 
+  EXPECT_CALL(*pipeline_, SetBoostLevel(DoubleNear(1.0, 1e-6))).Times(1);
   SendMessageW(slider, TBM_SETPOS, TRUE, slider_max);
   SendMessageW(window_->hwnd(), WM_HSCROLL,
                MAKEWPARAM(TB_THUMBPOSITION, slider_max),
                reinterpret_cast<LPARAM>(slider));
-
-  // Slider at max (rightmost) maps to maximum boost (level ~= 1.0).
-  EXPECT_NEAR(pipeline_observer_->last_boost_level_, 1.0, 1e-6);
 }
 
 TEST_F(MainWindowLiveTest, GetMinMaxInfoEnforcesMinimumSize) {
@@ -189,10 +178,9 @@ TEST_F(MainWindowLiveTest, HScrollFromNonSliderIsIgnored) {
   ASSERT_TRUE(window_created_);
 
   // Send WM_HSCROLL with a null HWND (not the slider); should be ignored.
+  EXPECT_CALL(*pipeline_, SetBoostLevel).Times(0);
   SendMessageW(window_->hwnd(), WM_HSCROLL, MAKEWPARAM(TB_THUMBPOSITION, 500),
                /*lParam=*/0);
-
-  EXPECT_EQ(pipeline_observer_->set_level_count_, 0);
 }
 
 TEST_F(MainWindowLiveTest, SizeMessageUpdatesLayout) {

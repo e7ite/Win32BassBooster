@@ -263,7 +263,7 @@ if(BUILD_TESTS)
 
         add_executable(main_window_test src/main_window_test.cpp)
         target_link_libraries(main_window_test PRIVATE
-            main_window GTest::gtest_main)
+            main_window GTest::gtest_main GTest::gmock)
         target_include_directories(main_window_test PRIVATE src)
         add_test(NAME main_window_test
                  COMMAND $<TARGET_FILE:main_window_test> --gtest_color=yes)
