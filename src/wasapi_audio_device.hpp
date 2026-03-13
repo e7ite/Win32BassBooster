@@ -16,7 +16,19 @@
 
 class WasapiAudioDevice final : public AudioDevice {
  public:
-  WasapiAudioDevice() = default;
+  struct Dependencies {
+    IAudioClient* capture_client = nullptr;
+    IAudioClient* render_client = nullptr;
+    IAudioCaptureClient* capture_service = nullptr;
+    IAudioRenderClient* render_service = nullptr;
+    WAVEFORMATEX* format = nullptr;
+    std::wstring endpoint_name;
+  };
+
+  WasapiAudioDevice();
+  // Allows construction with preconfigured clients, services, and format.
+  // `format` follows the same `CoTaskMemFree` ownership convention as `Open()`.
+  explicit WasapiAudioDevice(Dependencies dependencies);
   ~WasapiAudioDevice() override;
 
   WasapiAudioDevice(const WasapiAudioDevice&) = delete;

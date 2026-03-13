@@ -316,6 +316,16 @@ struct StreamClientSetup {
 
 }  // namespace
 
+WasapiAudioDevice::WasapiAudioDevice() : WasapiAudioDevice(Dependencies{}) {}
+
+WasapiAudioDevice::WasapiAudioDevice(Dependencies dependencies)
+    : capture_client_(dependencies.capture_client),
+      render_client_(dependencies.render_client),
+      capture_service_(dependencies.capture_service),
+      render_service_(dependencies.render_service),
+      format_(dependencies.format),
+      endpoint_name_(std::move(dependencies.endpoint_name)) {}
+
 WasapiAudioDevice::~WasapiAudioDevice() { Close(); }
 
 AudioPipelineInterface::Status WasapiAudioDevice::Open() {
