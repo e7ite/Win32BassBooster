@@ -4,11 +4,6 @@
 #ifndef WIN32BASSBOOSTER_SRC_AUDIO_PIPELINE_HPP_
 #define WIN32BASSBOOSTER_SRC_AUDIO_PIPELINE_HPP_
 
-#define WIN32_LEAN_AND_MEAN
-#include <audioclient.h>
-#include <mmdeviceapi.h>
-#include <windows.h>
-
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -44,54 +39,8 @@ class AudioPipeline final : public AudioPipelineInterface {
     return endpoint_name_;
   }
 
-  // Public because anonymous-namespace helpers in `audio_pipeline.cpp` reuse
-  // this deleter for temporary COM ownership while `ComPtr` stays private. COM
-  // objects are reference-counted. `Release()` decrements the count and frees
-  // the object when it reaches zero - the COM equivalent of delete. This custom
-  // deleter lets `unique_ptr` manage COM lifetimes without calling delete.
-  struct ComRelease {
-    template <typename T>
-    void operator()(T* ptr) const noexcept {
-      if (ptr != nullptr) {
-        ptr->Release();
-      }
-    }
-  };
-
-  // Public because anonymous-namespace helpers in `audio_pipeline.cpp` reuse
-  // this deleter for temporary mix-format ownership.
-  struct CoTaskMemFreeDeleter {
-    void operator()(WAVEFORMATEX* format) const noexcept {
-      if (format != nullptr) {
-        CoTaskMemFree(format);
-      }
-    }
-  };
-
  private:
   std::unique_ptr<AudioDevice> device_;
-
-  // Two-step init pattern required by COM factories: T* raw = nullptr;
-  // factory(..., &raw); ptr.reset(raw).
-  template <typename T>
-  using ComPtr = std::unique_ptr<T, ComRelease>;
-
-  // Locates the current default render endpoint during startup and recovery.
-  ComPtr<IMMDeviceEnumerator> enumerator_;
-  // Holds the speakers/headphones endpoint that loopback capture mirrors.
-  ComPtr<IMMDevice> render_device_;
-  // Owns the WASAPI loopback stream configuration and lifetime.
-  ComPtr<IAudioClient> capture_client_;
-  // Owns the WASAPI render stream used to accept processed float output.
-  ComPtr<IAudioClient> render_client_;
-  // Pulls captured endpoint packets from the loopback audio client.
-  ComPtr<IAudioCaptureClient> capture_service_;
-  // Exposes the render buffer that receives processed stereo float frames.
-  ComPtr<IAudioRenderClient> render_service_;
-
-  // Owns the render mix format with the required `CoTaskMemFree` cleanup.
-  // Process loopback captures in the render format, so this serves both paths.
-  std::unique_ptr<WAVEFORMATEX, CoTaskMemFreeDeleter> render_format_;
 
   // Low-shelf EQ that boosts bass frequencies. Applied first in the DSP chain.
   BassBoostFilter filter_;

@@ -169,9 +169,7 @@ if(WIN32)
     add_library(audio_pipeline STATIC src/audio_pipeline.cpp)
     target_include_directories(audio_pipeline PUBLIC src)
     target_link_libraries(audio_pipeline PUBLIC
-        endpoint_audio_format bass_boost_filter
-        loopback_capture_activation wasapi_audio_device
-        ole32 oleaut32 uuid avrt mmdevapi)
+        bass_boost_filter wasapi_audio_device avrt)
     target_enable_clang_tidy(audio_pipeline)
 
     add_library(main_window STATIC src/main_window.cpp)
