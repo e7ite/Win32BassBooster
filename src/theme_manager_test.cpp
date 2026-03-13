@@ -11,6 +11,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+using ::testing::Each;
+using ::testing::Ne;
+
 namespace theme_manager {
 namespace {
 
@@ -67,6 +70,38 @@ TEST(ThemeManagerTest, BuildPaletteReturnsNonZeroColors) {
   EXPECT_NE(palette.background + palette.surface + palette.text, 0U);
 }
 
+TEST(ThemeManagerTest, BuildPaletteDarkModeUsesDarkThemeColors) {
+  const Palette palette = BuildPalette(/*dark_mode=*/true);
+
+  EXPECT_EQ(palette.background, RGB(25, 25, 28));
+  EXPECT_EQ(palette.surface, RGB(38, 38, 44));
+  EXPECT_EQ(palette.accent, RGB(0, 120, 215));
+  EXPECT_EQ(palette.text, RGB(240, 240, 240));
+  EXPECT_EQ(palette.text_muted, RGB(160, 160, 160));
+  EXPECT_EQ(palette.slider_track, RGB(70, 70, 78));
+  EXPECT_EQ(palette.slider_thumb, RGB(0, 120, 215));
+  EXPECT_EQ(palette.eq_bar, RGB(0, 140, 230));
+  EXPECT_EQ(palette.eq_bar_peak, RGB(255, 80, 60));
+  EXPECT_EQ(palette.grid_line, RGB(60, 60, 70));
+  EXPECT_EQ(palette.border, RGB(60, 60, 68));
+}
+
+TEST(ThemeManagerTest, BuildPaletteLightModeUsesLightThemeColors) {
+  const Palette palette = BuildPalette(/*dark_mode=*/false);
+
+  EXPECT_EQ(palette.background, RGB(243, 243, 243));
+  EXPECT_EQ(palette.surface, RGB(255, 255, 255));
+  EXPECT_EQ(palette.accent, RGB(0, 103, 192));
+  EXPECT_EQ(palette.text, RGB(28, 28, 28));
+  EXPECT_EQ(palette.text_muted, RGB(100, 100, 100));
+  EXPECT_EQ(palette.slider_track, RGB(190, 190, 200));
+  EXPECT_EQ(palette.slider_thumb, RGB(0, 103, 192));
+  EXPECT_EQ(palette.eq_bar, RGB(0, 120, 215));
+  EXPECT_EQ(palette.eq_bar_peak, RGB(220, 40, 20));
+  EXPECT_EQ(palette.grid_line, RGB(210, 210, 220));
+  EXPECT_EQ(palette.border, RGB(210, 210, 220));
+}
+
 TEST(ThemeManagerTest, BuildPaletteAllFieldsNonZero) {
   const Palette palette = BuildPalette();
   const std::vector<COLORREF> fields = {
@@ -75,7 +110,7 @@ TEST(ThemeManagerTest, BuildPaletteAllFieldsNonZero) {
       palette.slider_thumb, palette.eq_bar,     palette.eq_bar_peak,
       palette.grid_line,    palette.border};
 
-  EXPECT_THAT(fields, ::testing::Each(::testing::Ne(0U)));
+  EXPECT_THAT(fields, Each(Ne(0U)));
 }
 
 TEST(ThemeManagerTest, BlendColorQuarterBlend) {

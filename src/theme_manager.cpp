@@ -31,9 +31,9 @@ bool IsDarkMode() {
   return apps_use_light_theme == 0;
 }
 
-Palette BuildPalette() {
+Palette BuildPalette(bool dark_mode) {
   Palette palette = {};
-  if (IsDarkMode()) {
+  if (dark_mode) {
     palette.background = RGB(25, 25, 28);
     palette.surface = RGB(38, 38, 44);
     palette.accent = RGB(0, 120, 215);
@@ -60,6 +60,8 @@ Palette BuildPalette() {
   }
   return palette;
 }
+
+Palette BuildPalette() { return BuildPalette(IsDarkMode()); }
 
 void ApplyTitleBarTheme(HWND hwnd) {
   // `DWMWA_USE_IMMERSIVE_DARK_MODE` = 20 (Windows 10 20H1+).

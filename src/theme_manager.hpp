@@ -27,6 +27,9 @@ struct Palette {
 // Returns true if the system is currently in dark mode.
 [[nodiscard]] bool IsDarkMode();
 
+// Returns a colour palette for the supplied dark/light mode state.
+[[nodiscard]] Palette BuildPalette(bool dark_mode);
+
 // Returns a colour palette matched to the current dark/light mode.
 [[nodiscard]] Palette BuildPalette();
 
