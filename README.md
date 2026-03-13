@@ -155,6 +155,9 @@ then:
 |   |-- endpoint_audio_format.hpp/.cpp
 |   |   # Endpoint PCM decode to stereo float
 |   |-- audio_pipeline_interface.hpp          # Abstract audio pipeline contract
+|   |-- audio_device.hpp                      # Abstract audio device interface
+|   |-- wasapi_audio_device.hpp/.cpp
+|   |   # WASAPI loopback capture and render device
 |   |-- loopback_capture_activation.hpp/.cpp
 |   |   # Process-loopback capture activation
 |   |-- audio_pipeline.hpp/.cpp
@@ -277,15 +280,15 @@ succeed unless both CI jobs and all tests pass.
 
 The pipeline finds the current default render endpoint -- Windows' name for
 whichever speakers or headphones are currently selected as the output device.
-[`audio_pipeline.cpp`](src/audio_pipeline.cpp) opens the endpoint in shared mode
-(meaning other apps can keep using the same device at the same time) and asks
-Windows for the device's mix format -- the sample rate, bit depth, and
+[`wasapi_audio_device.cpp`](src/wasapi_audio_device.cpp) opens the endpoint in
+shared mode (meaning other apps can keep using the same device at the same time)
+and asks Windows for the device's mix format -- the sample rate, bit depth, and
 channel layout the device is already using. The app requires that format to be
 float32 stereo (two channels of 32-bit floating-point samples stored
 back-to-back). Float32 is the simplest format to do math on because the samples
 are already ordinary decimal numbers (like 0.5 or -0.3) rather than raw integers
 that need scaling, and stereo (left + right) is what virtually all desktop
-desktop speakers and headphones use.
+speakers and headphones use.
 
 ### Step 2 -- Create audio paths
 
@@ -298,13 +301,19 @@ the app creates two separate audio paths on the endpoint found in step 1:
   [`loopback_capture_activation.cpp`](src/loopback_capture_activation.cpp).
 - **Output (render) path** -- plays processed audio back to the same speakers.
 
-The capture path uses whatever format the render endpoint uses, so the pipeline
+The capture path uses whatever format the render endpoint uses, so the device
 reuses the same mix format for both paths.
+
+All WASAPI/COM interaction is encapsulated in
+[`wasapi_audio_device.cpp`](src/wasapi_audio_device.cpp) behind the
+[`AudioDevice`](src/audio_device.hpp) interface. The pipeline itself only sees
+the interface, which lets tests inject a fake device that provides canned audio
+data without real hardware.
 
 Both paths run on a dedicated high-priority thread using
 `AvSetMmThreadCharacteristicsW("Pro Audio", ...)`. If a Windows audio API call
-on either path fails, the audio thread tries to reacquire the default render
-endpoint and reopen both paths before giving up.
+on either path fails, the device tries to reacquire the default render endpoint
+and reopen both paths before giving up.
 
 ### Step 3 -- Set feedback guard
 
@@ -320,9 +329,10 @@ reproduce).
 
 Each captured packet goes through these stages:
 
-1. [`endpoint_audio_format`](src/endpoint_audio_format.cpp) decodes the
-   endpoint packet to interleaved stereo float samples -- left and right channel
-   values stored in alternating order (`L, R, L, R, ...`), where each value is a
+1. [`wasapi_audio_device.cpp`](src/wasapi_audio_device.cpp) reads a capture
+   packet and uses [`endpoint_audio_format`](src/endpoint_audio_format.cpp) to
+   decode it to interleaved stereo float samples -- left and right channel values
+   stored in alternating order (`L, R, L, R, ...`), where each value is a
    decimal number (like 0.5 or -0.3) representing the air pressure at that
    instant.
 2. [`bass_boost_filter`](src/bass_boost_filter.cpp) applies a low-shelf biquad
@@ -372,8 +382,8 @@ makes the boost audible early in the slider travel instead of bunching all the
 change near the end.
 
 `SetBoostLevel` is called from the UI thread while the audio thread is running.
-The user-controlled DSP parameters are stored in atomics, so the audio thread
-can read them without taking locks on the hot path (the time-critical inner loop
+The filter stores its gain in an atomic, so the audio thread can read the
+current level without taking locks on the hot path (the time-critical inner loop
 that processes every audio sample).
 
 ### Step 5 -- Play added bass
