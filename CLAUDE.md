@@ -1006,9 +1006,9 @@ Good:
 ### Testing
 - When production code collaborates with OS APIs, service APIs, device APIs,
   filesystems, clocks, threads, process state, or other environment-bound
-  behavior, first prefer extracting a dependency injection seam and testing
-  against a controllable test double. Use a focused integration test only when
-  the real boundary is itself part of the contract under test.
+  behavior, first prefer extracting an injectable boundary and testing against
+  a controllable test double. Use a focused integration test only when the
+  real boundary is itself part of the contract under test.
 - Every new behavior-owning source file should have corresponding test
   coverage in the same change, including the needed `*_test.cpp` and CMake
   wiring when a standalone test target is the clearest fit. Do not add
@@ -1020,7 +1020,7 @@ Good:
   pointer state, error messages) under controlled conditions.
 - Never remove, disable, or weaken a test to make CI pass. A failing test is a
   signal to fix production code, fix the test environment, or add the missing
-  seam or test double -- not to delete the coverage.
+  injectable boundary or test double -- not to delete the coverage.
 
 ```cpp
 // Bad: test adds control flow to adapt to runtime environment details.
@@ -1329,14 +1329,14 @@ TEST(LoopbackCaptureActivationTest, FailsWithoutCom) {
 - Prefer direct, deterministic triggers (`SendMessageW`, explicit inputs, fixed
   seeds when unavoidable) and explicit cleanup in the test body or fixture.
 - If a test helper starts needing branches, threads, promises, retries, or
-  hidden cleanup, simplify the test coverage or extract a better production seam
-  instead of building a mini runtime in `_test.cpp`.
+  hidden cleanup, simplify the test coverage or extract a better production
+  boundary instead of building a mini runtime in `_test.cpp`.
 - Do not add logic to tests unless it is absolutely unavoidable. If it seems
   unavoidable, ask before adding it.
 - If a test needs branches, loops, retries, conditional cleanup, or helper
   runtimes to express one scenario, simplify the test or extract a better
-  production seam instead. Otherwise the test starts needing validation of its
-  own and becomes brittle.
+  production boundary instead. Otherwise the test starts needing validation of
+  its own and becomes brittle.
 
 ```cpp
 // Bad: helper complexity starts to dominate the test story.
