@@ -3,6 +3,8 @@
 
 #include "audio_pipeline.hpp"
 
+#include <audioclient.h>
+
 #include <chrono>
 #include <cmath>
 #include <future>
@@ -49,6 +51,12 @@ class MockAudioDevice final : public AudioDevice {
 
 TEST(AudioPipelineTest, NotRunningBeforeStart) {
   AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
+
+  EXPECT_FALSE(pipeline.is_running());
+}
+
+TEST(AudioPipelineTest, DefaultConstructorStartsStopped) {
+  AudioPipeline pipeline;
 
   EXPECT_FALSE(pipeline.is_running());
 }
@@ -446,6 +454,71 @@ TEST(AudioPipelineTest, FailedReadWithoutRecoveryStopsPipeline) {
 
   ASSERT_TRUE(pipeline.Start().ok());
   ASSERT_EQ(recover_attempted_future.wait_for(std::chrono::seconds(1)),
+            std::future_status::ready);
+  pipeline.Stop();
+
+  EXPECT_FALSE(pipeline.is_running());
+}
+
+TEST(AudioPipelineTest, FailedRenderWithoutRecoveryStopsPipeline) {
+  auto device = std::make_unique<MockAudioDevice>();
+  EXPECT_CALL(*device, Open())
+      .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  EXPECT_CALL(*device, endpoint_name())
+      .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
+  EXPECT_CALL(*device, StartStreams())
+      .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
+  std::promise<void> recover_attempted;
+  std::future<void> recover_attempted_future = recover_attempted.get_future();
+  CapturePacket packet;
+  packet.frames = 2;
+  packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
+  EXPECT_CALL(*device, ReadNextPacket()).WillOnce(Return(packet));
+  EXPECT_CALL(*device, WriteRenderPacket(_)).WillOnce(Return(E_FAIL));
+  EXPECT_CALL(*device, TryRecover(E_FAIL))
+      .WillOnce([&recover_attempted](HRESULT /*failure*/) {
+        recover_attempted.set_value();
+        return false;
+      });
+  AudioPipeline pipeline(std::move(device));
+
+  ASSERT_TRUE(pipeline.Start().ok());
+  ASSERT_EQ(recover_attempted_future.wait_for(std::chrono::seconds(1)),
+            std::future_status::ready);
+  pipeline.Stop();
+
+  EXPECT_FALSE(pipeline.is_running());
+}
+
+TEST(AudioPipelineTest, RecoverableFailureRefreshesFilterSampleRate) {
+  auto device = std::make_unique<MockAudioDevice>();
+  EXPECT_CALL(*device, Open())
+      .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
+  std::promise<void> sample_rate_refreshed;
+  std::future<void> sample_rate_refreshed_future =
+      sample_rate_refreshed.get_future();
+  EXPECT_CALL(*device, sample_rate())
+      .WillOnce(Return(48000.0))
+      .WillOnce([&sample_rate_refreshed] {
+        sample_rate_refreshed.set_value();
+        return 44100.0;
+      });
+  EXPECT_CALL(*device, endpoint_name())
+      .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
+  EXPECT_CALL(*device, StartStreams())
+      .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
+  CapturePacket failed_packet;
+  failed_packet.status = AUDCLNT_E_DEVICE_INVALIDATED;
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(failed_packet))
+      .WillRepeatedly(Return(CapturePacket{}));
+  EXPECT_CALL(*device, TryRecover(AUDCLNT_E_DEVICE_INVALIDATED))
+      .WillOnce(Return(true));
+  AudioPipeline pipeline(std::move(device));
+
+  ASSERT_TRUE(pipeline.Start().ok());
+  ASSERT_EQ(sample_rate_refreshed_future.wait_for(std::chrono::seconds(1)),
             std::future_status::ready);
   pipeline.Stop();
 
