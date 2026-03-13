@@ -1,10 +1,7 @@
 // Verifies the pipeline's initial state, boost level clamping, gain curve
-// shape, stop idempotency, and lifecycle behavior through a mix of injected
-// and live audio paths.
+// shape, and start/stop lifecycle through an injected test audio device.
 
 #include "audio_pipeline.hpp"
-
-#include <objbase.h>
 
 #include <cmath>
 #include <memory>
@@ -21,6 +18,14 @@ class MockAudioDevice final : public AudioDevice {
  public:
   void SetOpenStatus(AudioPipelineInterface::Status status) {
     open_status_ = std::move(status);
+  }
+
+  void SetSampleRateHz(double sample_rate_hz) {
+    sample_rate_hz_ = sample_rate_hz;
+  }
+
+  void SetEndpointName(std::wstring endpoint_name) {
+    endpoint_name_ = std::move(endpoint_name);
   }
 
   AudioPipelineInterface::Status Open() override {
@@ -44,13 +49,16 @@ class MockAudioDevice final : public AudioDevice {
 
   bool TryRecover(HRESULT /*failure*/) override { return false; }
 
-  double sample_rate() const override { return 48000.0; }
+  double sample_rate() const override { return sample_rate_hz_; }
 
   const std::wstring& endpoint_name() const override { return endpoint_name_; }
 
+  [[nodiscard]] bool opened() const { return opened_; }
+
  private:
   AudioPipelineInterface::Status open_status_;
-  std::wstring endpoint_name_;
+  double sample_rate_hz_ = 48000.0;
+  std::wstring endpoint_name_ = L"Test Device";
   bool opened_ = false;
 };
 
@@ -99,8 +107,6 @@ TEST(AudioPipelineTest, HalfBoostScalesGainBySqrt) {
 }
 
 TEST(AudioPipelineTest, BoostCurveIsConvexAtMidpoint) {
-  // sqrt(0.5) ~= 0.707, more than the linear 0.5: audible boost well before
-  // max.
   constexpr double kHalfLevel = 0.5;
   AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
@@ -110,7 +116,6 @@ TEST(AudioPipelineTest, BoostCurveIsConvexAtMidpoint) {
 }
 
 TEST(AudioPipelineTest, BoostCurveIsConvexAtQuarterLevel) {
-  // sqrt(0.25) = 0.5, more than the linear 0.25.
   constexpr double kQuarterLevel = 0.25;
   AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
@@ -144,7 +149,6 @@ TEST(AudioPipelineTest, StopBeforeStartIsSafe) {
   EXPECT_FALSE(pipeline.is_running());
 }
 
-// SetBoostLevel multiple times should always reflect the latest value.
 TEST(AudioPipelineTest, RepeatedBoostLevelUpdatesReflectLatest) {
   AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
 
@@ -178,7 +182,6 @@ TEST(AudioPipelineTest, DestructorAfterStopIsSafe) {
   AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
   pipeline.Stop();
 
-  // If we reach here, the destructor did not crash after explicit Stop.
   SUCCEED();
 }
 
@@ -212,83 +215,58 @@ TEST(AudioPipelineTest, GainFollowsSqrtAtNinetyPercentLevel) {
               1e-9);
 }
 
-TEST(AudioPipelineTest, StartFailsWithoutComInitialization) {
-  AudioPipeline pipeline;
+TEST(AudioPipelineTest, StartFailsWhenDeviceOpenFails) {
+  auto device = std::make_unique<MockAudioDevice>();
+  device->SetOpenStatus(
+      AudioPipelineInterface::Status::Error(E_FAIL, L"Test open error"));
+  AudioPipeline pipeline(std::move(device));
 
   const AudioPipelineInterface::Status status = pipeline.Start();
 
   EXPECT_FALSE(status.ok());
-  EXPECT_TRUE(FAILED(status.code));
-  EXPECT_FALSE(status.error_message.empty());
+  EXPECT_EQ(status.code, E_FAIL);
+  EXPECT_EQ(status.error_message, L"Test open error");
   EXPECT_FALSE(pipeline.is_running());
 }
 
-TEST(AudioPipelineTest, StartSucceedsWithComInitialized) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
-
-  AudioPipeline pipeline;
+TEST(AudioPipelineTest, StartSucceedsWithInjectedDevice) {
+  auto device = std::make_unique<MockAudioDevice>();
+  MockAudioDevice& device_ref = *device;
+  device->SetEndpointName(L"Configured Test Device");
+  AudioPipeline pipeline(std::move(device));
 
   const AudioPipelineInterface::Status status = pipeline.Start();
 
-  ASSERT_TRUE(status.ok());
+  EXPECT_TRUE(status.ok());
   EXPECT_TRUE(pipeline.is_running());
-  EXPECT_FALSE(pipeline.endpoint_name().empty());
-
-  pipeline.Stop();
-
-  EXPECT_FALSE(pipeline.is_running());
-
-  CoUninitialize();
+  EXPECT_TRUE(device_ref.opened());
+  EXPECT_EQ(pipeline.endpoint_name(), L"Configured Test Device");
 }
 
 TEST(AudioPipelineTest, StartWhileRunningReturnsOk) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
+  ASSERT_TRUE(pipeline.Start().ok());
 
-  AudioPipeline pipeline;
-
-  const AudioPipelineInterface::Status first_start = pipeline.Start();
-  ASSERT_TRUE(first_start.ok());
-
-  // Calling Start a second time while already running returns Ok immediately.
   const AudioPipelineInterface::Status second_start = pipeline.Start();
 
   EXPECT_TRUE(second_start.ok());
   EXPECT_TRUE(pipeline.is_running());
-
-  pipeline.Stop();
-
-  CoUninitialize();
 }
 
 TEST(AudioPipelineTest, BoostLevelUpdatesWhileRunning) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
-
-  AudioPipeline pipeline;
-
-  const AudioPipelineInterface::Status status = pipeline.Start();
-  ASSERT_TRUE(status.ok());
+  AudioPipeline pipeline(std::make_unique<MockAudioDevice>());
+  ASSERT_TRUE(pipeline.Start().ok());
 
   pipeline.SetBoostLevel(1.0);
 
   EXPECT_NEAR(pipeline.gain_db(), BassBoostFilter::kMaxGainDb, 1e-9);
-
-  pipeline.Stop();
-
-  CoUninitialize();
 }
 
 TEST(AudioPipelineTest, StopAfterStartCleansUpResources) {
-  const HRESULT com_init =
-      CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
-
-  AudioPipeline pipeline;
+  auto device = std::make_unique<MockAudioDevice>();
+  MockAudioDevice& device_ref = *device;
+  device->SetEndpointName(L"Configured Test Device");
+  AudioPipeline pipeline(std::move(device));
 
   ASSERT_TRUE(pipeline.Start().ok());
   ASSERT_TRUE(pipeline.is_running());
@@ -296,10 +274,8 @@ TEST(AudioPipelineTest, StopAfterStartCleansUpResources) {
   pipeline.Stop();
 
   EXPECT_FALSE(pipeline.is_running());
-  // Endpoint name persists after stop.
-  EXPECT_FALSE(pipeline.endpoint_name().empty());
-
-  CoUninitialize();
+  EXPECT_FALSE(device_ref.opened());
+  EXPECT_EQ(pipeline.endpoint_name(), L"Configured Test Device");
 }
 
 }  // namespace
