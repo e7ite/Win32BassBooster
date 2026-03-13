@@ -275,8 +275,15 @@ AudioPipelineInterface::Status WasapiAudioDevice::Open() {
       !status.ok()) {
     return status;
   }
-  return AudioPipelineInterface::Status::Error(
-      E_NOTIMPL, L"`WasapiAudioDevice::Open` still needs to retain setup state");
+  enumerator_ = std::move(endpoint.enumerator);
+  render_device_ = std::move(endpoint.render_device);
+  endpoint_name_ = std::move(endpoint.endpoint_name);
+  capture_client_ = std::move(clients.capture.audio_client);
+  capture_service_ = std::move(clients.capture.service);
+  render_client_ = std::move(clients.render.audio_client);
+  render_service_ = std::move(clients.render.service);
+  format_ = std::move(clients.render.format);
+  return AudioPipelineInterface::Status::Ok();
 }
 
 AudioPipelineInterface::Status WasapiAudioDevice::StartStreams() {
