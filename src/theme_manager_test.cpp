@@ -11,15 +11,15 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-using ::testing::Each;
-using ::testing::Ne;
-
 namespace theme_manager {
 namespace {
 
+using ::testing::Each;
+using ::testing::Ne;
+
 TEST(ThemeManagerTest, BlendColorAtT0ReturnsFrom) {
   const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(255, 255, 255)};
-  const COLORREF blended = BlendColor(range, 0.0F);
+  const COLORREF blended = BlendColor(range, /*blend=*/0.0F);
 
   EXPECT_EQ(GetRValue(blended), 0U);
   EXPECT_EQ(GetGValue(blended), 0U);
@@ -28,7 +28,7 @@ TEST(ThemeManagerTest, BlendColorAtT0ReturnsFrom) {
 
 TEST(ThemeManagerTest, BlendColorAtT1ReturnsTo) {
   const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(200, 100, 50)};
-  const COLORREF blended = BlendColor(range, 1.0F);
+  const COLORREF blended = BlendColor(range, /*blend=*/1.0F);
 
   EXPECT_EQ(GetRValue(blended), 200U);
   EXPECT_EQ(GetGValue(blended), 100U);
@@ -37,7 +37,7 @@ TEST(ThemeManagerTest, BlendColorAtT1ReturnsTo) {
 
 TEST(ThemeManagerTest, BlendColorMidpointIsHalfway) {
   const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(100, 200, 50)};
-  const COLORREF blended = BlendColor(range, 0.5F);
+  const COLORREF blended = BlendColor(range, /*blend=*/0.5F);
 
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 50, 1);
   EXPECT_NEAR(static_cast<int>(GetGValue(blended)), 100, 1);
@@ -46,16 +46,16 @@ TEST(ThemeManagerTest, BlendColorMidpointIsHalfway) {
 
 TEST(ThemeManagerTest, BlendColorClampsAboveOne) {
   const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(255, 255, 255)};
-  const COLORREF clamped = BlendColor(range, 2.0F);
-  const COLORREF at_one = BlendColor(range, 1.0F);
+  const COLORREF clamped = BlendColor(range, /*blend=*/2.0F);
+  const COLORREF at_one = BlendColor(range, /*blend=*/1.0F);
 
   EXPECT_EQ(clamped, at_one);
 }
 
 TEST(ThemeManagerTest, BlendColorClampsBelowZero) {
   const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(255, 255, 255)};
-  const COLORREF clamped = BlendColor(range, -1.0F);
-  const COLORREF at_zero = BlendColor(range, 0.0F);
+  const COLORREF clamped = BlendColor(range, /*blend=*/-1.0F);
+  const COLORREF at_zero = BlendColor(range, /*blend=*/0.0F);
 
   EXPECT_EQ(clamped, at_zero);
 }
@@ -115,7 +115,7 @@ TEST(ThemeManagerTest, BuildPaletteAllFieldsNonZero) {
 
 TEST(ThemeManagerTest, BlendColorQuarterBlend) {
   const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(100, 200, 40)};
-  const COLORREF blended = BlendColor(range, 0.25F);
+  const COLORREF blended = BlendColor(range, /*blend=*/0.25F);
 
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 25, 1);
   EXPECT_NEAR(static_cast<int>(GetGValue(blended)), 50, 1);
@@ -124,7 +124,7 @@ TEST(ThemeManagerTest, BlendColorQuarterBlend) {
 
 TEST(ThemeManagerTest, BlendColorThreeQuarterBlend) {
   const ColorRange range = {.from = RGB(0, 0, 0), .to = RGB(100, 200, 40)};
-  const COLORREF blended = BlendColor(range, 0.75F);
+  const COLORREF blended = BlendColor(range, /*blend=*/0.75F);
 
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 75, 1);
   EXPECT_NEAR(static_cast<int>(GetGValue(blended)), 150, 1);
@@ -136,15 +136,15 @@ TEST(ThemeManagerTest, BlendColorIdenticalFromAndTo) {
   const ColorRange range = {.from = color, .to = color};
 
   // Any blend factor between identical colors should return the same color.
-  EXPECT_EQ(BlendColor(range, 0.0F), color);
-  EXPECT_EQ(BlendColor(range, 0.5F), color);
-  EXPECT_EQ(BlendColor(range, 1.0F), color);
+  EXPECT_EQ(BlendColor(range, /*blend=*/0.0F), color);
+  EXPECT_EQ(BlendColor(range, /*blend=*/0.5F), color);
+  EXPECT_EQ(BlendColor(range, /*blend=*/1.0F), color);
 }
 
 TEST(ThemeManagerTest, BlendColorChannelsDoNotCrossTalk) {
   // Only the red channel differs; green and blue should stay at `from`.
   const ColorRange range = {.from = RGB(0, 100, 200), .to = RGB(255, 100, 200)};
-  const COLORREF blended = BlendColor(range, 0.5F);
+  const COLORREF blended = BlendColor(range, /*blend=*/0.5F);
 
   EXPECT_NEAR(static_cast<int>(GetRValue(blended)), 127, 1);
   EXPECT_EQ(GetGValue(blended), 100U);
