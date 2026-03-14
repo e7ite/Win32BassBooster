@@ -2,6 +2,12 @@
 // success with COM initialized, and failure without COM initialized. Each
 // test checks the full returned status rather than splitting one call into
 // several narrower tests.
+// The remaining uncovered lines are private callback and error-formatting
+// branches inside the async completion handler. Reaching them would require
+// testing implementation details directly instead of the public activation
+// contract exposed by this file. We do not take that extra step here because
+// it would couple the tests to the handler internals rather than the public
+// activation contract this file is meant to verify.
 
 #include "loopback_capture_activation.hpp"
 

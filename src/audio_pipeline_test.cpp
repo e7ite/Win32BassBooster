@@ -1,5 +1,12 @@
 // Verifies the pipeline's initial state, boost level clamping, gain curve
 // shape, and start/stop lifecycle through an injected test audio device.
+// This target still reports lower aggregate coverage than the pipeline logic
+// itself because it links the default `WasapiAudioDevice` path. The remaining
+// gap is the real COM/default-endpoint startup flow, which would require live
+// hardware integration tests or deeper DI below `AudioDevice`. We do not take
+// that extra step here because live hardware makes the suite environment-
+// dependent, and deeper DI would push test scaffolding into the concrete
+// WASAPI adapter.
 
 #include "audio_pipeline.hpp"
 

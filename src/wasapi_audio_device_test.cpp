@@ -1,5 +1,12 @@
 // Verifies `WasapiAudioDevice` behavior without real audio hardware by using
 // constructor-injected clients plus mock COM clients.
+// This target keeps lower coverage because the concrete adapter still owns the
+// real default-endpoint acquisition and WASAPI client setup path. Covering
+// more of that code would require live hardware integration tests or a deeper
+// injected boundary below `AudioDevice`. We do not take that extra step here
+// because live hardware makes the suite machine-dependent, and a deeper
+// injected boundary would distort the production design just to raise
+// coverage.
 
 #include "wasapi_audio_device.hpp"
 
