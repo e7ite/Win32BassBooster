@@ -14,17 +14,26 @@
 // response. Plain struct so tests can inspect computed values without accessing
 // private state.
 struct BiquadCoeffs {
+  // Gain on the current input sample.
   double b0 = 1.0;
+  // Gain on the one-sample-old input.
   double b1 = 0.0;
+  // Gain on the two-samples-old input.
   double b2 = 0.0;
+  // Gain on the one-sample-old output.
   double a1 = 0.0;
+  // Gain on the two-samples-old output.
   double a2 = 0.0;
 };
 
+// Single-band low-shelf filter that boosts bass while keeping independent
+// delay-line state for the left and right channels.
 class BassBoostFilter {
  public:
   enum class Channel {
+    // Uses the left-channel delay-line state.
     Left = 0,
+    // Uses the right-channel delay-line state.
     Right = 1,
   };
 
@@ -47,28 +56,31 @@ class BassBoostFilter {
   // Most common Windows audio session sample rate.
   static constexpr double kDefaultSampleRate = 48000.0;
 
+  // Creates a filter configured for `sample_rate` Hz audio.
   explicit BassBoostFilter(double sample_rate = kDefaultSampleRate);
 
   // Sets gain in dB. Clamped to [`kMinGainDb`, `kMaxGainDb`]. Thread-safe:
-  // may be called from any thread while the audio loop runs.
+  // `gain_db` may be called from any thread while the audio loop runs.
   void SetGainDb(double gain_db);
 
-  // Sets the shelf cutoff in Hz. Clamped to [20 Hz, 0.4 x `sample_rate`] to
-  // stay within the audible range and away from the Nyquist limit.
+  // Sets the shelf cutoff to `freq_hz`. Clamped to [20 Hz,
+  // 0.4 x `sample_rate_`] to stay within the audible range and away from the
+  // Nyquist limit.
   void SetFrequency(double freq_hz);
 
-  // Not thread-safe: call only when the audio loop is stopped, then `Reset()`.
+  // Sets the sample rate to `sample_rate`. Not thread-safe: call only when the
+  // audio loop is stopped, then `Reset()`.
   void SetSampleRate(double sample_rate);
 
   // Clears filter delay-line state; call after `SetSampleRate()` or on stream
   // restart to avoid a burst of stale samples at the output.
   void Reset();
 
-  // Processes interleaved stereo in place: samples holds L,R pairs.
+  // Processes interleaved stereo in place. `samples` must contain L,R pairs.
   void ProcessStereo(std::span<float> samples);
 
-  // Processes a single channel from a buffer in place. `channel` selects which
-  // delay-line state to use.
+  // Processes one channel in place. `samples` holds that channel's scalar
+  // samples, and `channel` selects which delay-line state to use.
   void ProcessMono(std::span<float> samples, Channel channel);
 
   [[nodiscard]] double gain_db() const noexcept { return gain_db_.load(); }

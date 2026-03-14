@@ -26,8 +26,11 @@ constexpr double kNyquistGuardRatio = 0.4;
 // Inputs to the Audio EQ Cookbook low-shelf formula. Grouped so the three
 // values that fully determine the shelf cannot be accidentally transposed.
 struct ShelfParams {
+  // Desired shelf gain in dB.
   double gain_db;
+  // Shelf cutoff frequency in Hz.
   double freq_hz;
+  // Active stream sample rate in Hz.
   double sample_rate;
 };
 
