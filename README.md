@@ -247,7 +247,7 @@ cmake -B build -DENABLE_CLANG_TIDY=OFF
 
 Do not land code built this way without running the normal checks again.
 
-## CI and branch protection
+## CI
 
 GitHub Actions runs two parallel jobs on every push and pull request:
 
@@ -259,18 +259,6 @@ GitHub Actions runs two parallel jobs on every push and pull request:
 
 The badge above reflects the current status of `main`. Pushes to `main` publish
 the HTML report and coverage badge through GitHub Pages.
-
-To prevent merging broken code, enable branch protection in the GitHub
-repository settings:
-
-1. **Settings -> Branches -> Add branch protection rule** for `main`
-2. Enable **Require status checks to pass before merging** and select both the
-   `release` and `debug` checks
-3. Enable **Require branches to be up to date before merging**
-4. Enable **Do not allow bypassing the above settings**
-
-With these rules in place, no PR can be merged and no direct push to `main` can
-succeed unless both CI jobs and all tests pass.
 
 ## How it works
 
