@@ -10,16 +10,22 @@
 #include <string>
 #include <string_view>
 
+// Abstract audio-pipeline contract used by the UI and tests.
 class AudioPipelineInterface {
  public:
+  // Result of starting the pipeline or opening an audio device.
   struct Status {
     Status() = default;
 
+    // Platform status code for the attempted operation.
     HRESULT code = S_OK;
+    // Human-readable explanation when `code` reports failure.
     std::wstring error_message;
 
+    // Returns a success status with `S_OK` and no error message.
     [[nodiscard]] static Status Ok() { return {}; }
 
+    // Returns a failure status with the supplied `status_code` and `message`.
     [[nodiscard]] static Status Error(HRESULT status_code,
                                       std::wstring_view message) {
       Status status;
@@ -28,6 +34,7 @@ class AudioPipelineInterface {
       return status;
     }
 
+    // Returns true when `code` represents success.
     [[nodiscard]] bool ok() const noexcept { return SUCCEEDED(code); }
   };
 
@@ -44,7 +51,10 @@ class AudioPipelineInterface {
   // boost. Maps level to gain and exciter via a square-root curve.
   virtual void SetBoostLevel(double level) = 0;
 
+  // Returns the current boost gain in dB.
   [[nodiscard]] virtual double gain_db() const = 0;
+  // Returns the friendly name of the active render endpoint, or an empty
+  // string when no endpoint has been opened yet.
   [[nodiscard]] virtual const std::wstring& endpoint_name() const = 0;
 };
 

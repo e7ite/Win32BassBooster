@@ -1,5 +1,5 @@
 // Abstract audio device for capture and render I/O. Lets tests substitute a
-// fake device that provides canned audio data without real hardware.
+// mock device that provides canned audio data without real hardware.
 
 #ifndef WIN32BASSBOOSTER_SRC_AUDIO_DEVICE_HPP_
 #define WIN32BASSBOOSTER_SRC_AUDIO_DEVICE_HPP_
@@ -17,12 +17,17 @@
 // One read result from the capture stream: decoded interleaved stereo float
 // (L, R, L, R, ...), or an error/empty read when `status` or `frames` says so.
 struct CapturePacket {
+  // `S_OK` on success, or the failing HRESULT from the capture path.
   HRESULT status = S_OK;
+  // Interleaved stereo float PCM in L,R order.
   std::vector<float> samples;
+  // Number of stereo frames represented in `samples`.
   uint32_t frames = 0;
+  // True when the endpoint marked the packet as silence.
   bool silent = false;
 };
 
+// Abstract capture and render device boundary used by `AudioPipeline`.
 class AudioDevice {
  public:
   virtual ~AudioDevice() = default;
@@ -48,12 +53,13 @@ class AudioDevice {
 
   // Writes processed stereo float samples to the render buffer. Returns
   // `S_OK` on success, `S_FALSE` when the render buffer cannot accept the
-  // frames, or a failing HRESULT on error.
+  // frames from `pcm`, or a failing HRESULT on error.
   [[nodiscard]] virtual HRESULT WriteRenderPacket(
       std::span<const float> pcm) = 0;
 
   // Attempts recovery after a stream failure by re-acquiring the endpoint and
-  // restarting streams. Returns true when recovery succeeds; false otherwise.
+  // restarting streams. `failure` is the HRESULT that broke the current
+  // stream pair. Returns true when recovery succeeds; false otherwise.
   [[nodiscard]] virtual bool TryRecover(HRESULT failure) = 0;
 
   // Returns the device sample rate in Hz (e.g. 48000.0).

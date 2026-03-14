@@ -26,12 +26,14 @@ class MainWindow {
   MainWindow(const MainWindow&) = delete;
   MainWindow& operator=(const MainWindow&) = delete;
 
-  // Creates and shows the window. Returns false if Win32 window creation fails.
+  // Creates and shows the window using `instance` and `cmd_show`. Returns
+  // false if Win32 window creation fails.
   [[nodiscard]] bool Create(HINSTANCE instance, int cmd_show);
 
   // Dispatches instance-specific window messages. Public so the free-function
   // `WNDPROC` callback in `main_window.cpp` can call it after looking up the
-  // instance pointer from window user data.
+  // instance pointer from window user data. `hwnd` is this window's handle;
+  // `msg`, `wparam`, and `lparam` are the raw Win32 message payload.
   LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
   [[nodiscard]] HWND hwnd() const noexcept { return hwnd_; }

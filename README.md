@@ -307,8 +307,8 @@ reuses the same mix format for both paths.
 All WASAPI/COM interaction is encapsulated in
 [`wasapi_audio_device.cpp`](src/wasapi_audio_device.cpp) behind the
 [`AudioDevice`](src/audio_device.hpp) interface. The pipeline itself only sees
-the interface, which lets tests inject a fake device that provides canned audio
-data without real hardware.
+the interface, which lets tests inject a mock or other test double without
+opening real audio hardware.
 
 Both paths run on a dedicated high-priority thread using
 `AvSetMmThreadCharacteristicsW("Pro Audio", ...)`. If a Windows audio API call
