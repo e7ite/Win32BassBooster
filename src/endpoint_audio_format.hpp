@@ -12,8 +12,11 @@
 
 namespace endpoint_audio_format {
 
+// Decoded stereo PCM samples paired with their frame count.
 struct StereoPcmBuffer {
+  // Interleaved stereo float samples in L,R order.
   std::vector<float> samples;
+  // Number of stereo frames represented in `samples`.
   uint32_t frames = 0;
 };
 
@@ -21,9 +24,9 @@ struct StereoPcmBuffer {
 // output can be copied directly with no conversion.
 [[nodiscard]] bool SupportsDirectStereoFloatCopy(const WAVEFORMATEX& format);
 
-// Returns `StereoPcmBuffer`: `samples` is interleaved stereo float data
-// (L,R,...) and `frames` is the decoded frame count. Returns an empty buffer
-// when `src` is null or `frames` is 0.
+// Returns a `StereoPcmBuffer` decoded from `src` using `format`. `samples` is
+// interleaved stereo float data in L,R order and `frames` is the decoded frame
+// count. Returns an empty buffer when `src` is null or `frames` is 0.
 [[nodiscard]] StereoPcmBuffer DecodeToStereoFloat(const BYTE* src,
                                                   uint32_t frames,
                                                   const WAVEFORMATEX& format);
