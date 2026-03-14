@@ -14,11 +14,11 @@
 #pragma comment(lib, "uxtheme.lib")
 #endif
 
-using theme_manager::ApplyTitleBarTheme;
-using theme_manager::BuildPalette;
-using theme_manager::Palette;
-
 namespace {
+
+using ::theme_manager::ApplyTitleBarTheme;
+using ::theme_manager::BuildPalette;
+using ::theme_manager::Palette;
 
 constexpr int kHeaderH = 56;
 constexpr int kFooterH = 52;
