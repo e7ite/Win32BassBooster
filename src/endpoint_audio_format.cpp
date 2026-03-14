@@ -33,24 +33,28 @@ enum class SampleEncoding {
   kInt24,
 };
 
+// Reads one IEEE float32 sample from `sample_bytes`.
 float DecodeFloat32Sample(const BYTE* sample_bytes) {
   float sample = 0.0F;
   std::memcpy(&sample, sample_bytes, sizeof(sample));
   return sample;
 }
 
+// Reads one signed 16-bit PCM sample from `sample_bytes` and normalizes it.
 float DecodeInt16Sample(const BYTE* sample_bytes) {
   int16_t sample = 0;
   std::memcpy(&sample, sample_bytes, sizeof(sample));
   return static_cast<float>(sample) / kInt16FullScale;
 }
 
+// Reads one signed 32-bit PCM sample from `sample_bytes` and normalizes it.
 float DecodeInt32Sample(const BYTE* sample_bytes) {
   int32_t sample = 0;
   std::memcpy(&sample, sample_bytes, sizeof(sample));
   return static_cast<float>(sample) / kInt32FullScale;
 }
 
+// Reads one signed 24-bit PCM sample from `sample_bytes` and normalizes it.
 float DecodeInt24Sample(const BYTE* sample_bytes) {
   constexpr int kInt24HighByteShift = 24;
   constexpr int kInt24MiddleByteShift = 16;
@@ -66,6 +70,7 @@ float DecodeInt24Sample(const BYTE* sample_bytes) {
 
 using DecodeSampleFunction = float (*)(const BYTE* sample_bytes);
 
+// Extracts the extensible `SubFormat` GUID when `format` carries one.
 bool TryGetExtensibleSubFormat(const WAVEFORMATEX& format, GUID* sub_format) {
   if (format.wFormatTag != WAVE_FORMAT_EXTENSIBLE ||
       format.cbSize < kExtensibleExtraBytes) {
@@ -79,6 +84,7 @@ bool TryGetExtensibleSubFormat(const WAVEFORMATEX& format, GUID* sub_format) {
   return true;
 }
 
+// Maps the endpoint `format` to the decoder needed for each source sample.
 SampleEncoding DetectEncoding(const WAVEFORMATEX& format) {
   GUID sub_format = {};
   const bool has_extensible_sub_format =
