@@ -875,9 +875,12 @@ LayoutRegions ComputeLayout();
 - Prefer `std::string_view` and `std::wstring_view` for read-only inputs.
 - Prefer `std::string` and `std::wstring` for owned storage.
 - Avoid raw `const char*` and `const wchar_t*` in project interfaces.
-- When a platform API requires a NUL-terminated string, pass `c_str()` from an
-  owning string.
-- Do not rely on `string_view::data()` for NUL termination.
+- When a platform API requires a NUL-terminated string, keep the project
+  interface on `std::string_view` or `std::wstring_view` and pass `.data()` at
+  the call site.
+- Only pass `string_view::data()` to such APIs when the view is backed by a
+  NUL-terminated buffer (for example, a string literal or a full owning
+  string), not a sliced view.
 
 ```cpp
 // Bad: raw pointers in project interface.
@@ -888,21 +891,25 @@ void SetEndpointName(std::wstring_view name);
 ```
 
 ```cpp
-// Bad: data() from string_view may not be NUL-terminated.
+// Bad: sliced views lose the NUL-terminated contract expected by the API.
 void OpenDevice(std::wstring_view endpoint_id) {
-  ::OpenEndpoint(endpoint_id.data());
+  const std::wstring_view short_id = endpoint_id.substr(0, 3);
+  ::OpenEndpoint(short_id.data());
 }
 
-// Good: build an owning string, then pass c_str().
+// Good: pass `.data()` from a view backed by a NUL-terminated buffer.
 void OpenDevice(std::wstring_view endpoint_id) {
-  const std::wstring endpoint_id_str(endpoint_id);
-  ::OpenEndpoint(endpoint_id_str.c_str());
+  ::OpenEndpoint(endpoint_id.data());
 }
 ```
 
 ### Using declarations
 - In `.cpp` files, add `using` declarations for repeatedly qualified names to
-  reduce noise. Place them after includes and before the anonymous namespace.
+  reduce noise.
+- If the file has an anonymous namespace, place those `using` declarations
+  inside it.
+- Fully qualify the source namespace in those declarations so the imported
+  origin stays obvious.
 - Do not add `using` declarations or `using namespace` directives in header
   files; they leak into every translation unit that includes the header.
 
@@ -911,9 +918,11 @@ void OpenDevice(std::wstring_view endpoint_id) {
 palette_ = theme_manager::BuildPalette();
 theme_manager::ApplyTitleBarTheme(hwnd_);
 
-// Good: using declarations at file scope in the .cpp.
-using theme_manager::ApplyTitleBarTheme;
-using theme_manager::BuildPalette;
+// Good: keep the imports inside the anonymous namespace and fully qualified.
+namespace {
+using ::theme_manager::ApplyTitleBarTheme;
+using ::theme_manager::BuildPalette;
+}  // namespace
 // ...
 palette_ = BuildPalette();
 ApplyTitleBarTheme(hwnd_);
