@@ -3,21 +3,19 @@
 #include "theme_manager.hpp"
 
 #include <algorithm>
-
-namespace {
-
-// Registry path where Windows stores the AppsUseLightTheme DWORD (0 = dark).
-constexpr wchar_t kPersonalizeKey[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion"
-    L"\\Themes\\Personalize";
-
-}  // namespace
+#include <string_view>
 
 namespace theme_manager {
 
 bool IsDarkMode() {
+  // Registry path where Windows stores the AppsUseLightTheme DWORD (0 = dark).
+  constexpr std::wstring_view kPersonalizeKey =
+      L"Software\\Microsoft\\Windows\\CurrentVersion"
+      L"\\Themes\\Personalize";
+
   HKEY key = nullptr;
-  if (RegOpenKeyExW(HKEY_CURRENT_USER, kPersonalizeKey, /*ulOptions=*/0,
+  if (RegOpenKeyExW(HKEY_CURRENT_USER, kPersonalizeKey.data(),
+                    /*ulOptions=*/0,
                     KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
     return false;
   }

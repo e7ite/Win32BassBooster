@@ -5,6 +5,7 @@
 #include <avrt.h>
 
 #include <algorithm>
+#include <string_view>
 #include <vector>
 
 #include "audio_device.hpp"
@@ -15,22 +16,27 @@ namespace {
 
 // Keeps the MMCSS registration scoped to the audio thread lifetime so the main
 // loop does not need to carry a nullable AVRT handle through every exit path.
-class ScopedMmThreadCharacteristics final {
+class MmThreadCharacteristicsRegistration final {
  public:
-  explicit ScopedMmThreadCharacteristics(const wchar_t* task_name) {
+  // `task_name` keeps the project-facing interface on `std::wstring_view`.
+  // Callers must pass a view backed by a null-terminated wide string because
+  // AVRT consumes the raw `PCWSTR` directly.
+  explicit MmThreadCharacteristicsRegistration(
+      const std::wstring_view task_name) {
     DWORD task_index = 0;
-    handle_ = AvSetMmThreadCharacteristicsW(task_name, &task_index);
+    handle_ = AvSetMmThreadCharacteristicsW(task_name.data(), &task_index);
   }
 
-  ~ScopedMmThreadCharacteristics() {
+  ~MmThreadCharacteristicsRegistration() {
     if (handle_ != nullptr) {
       AvRevertMmThreadCharacteristics(handle_);
     }
   }
 
-  ScopedMmThreadCharacteristics(const ScopedMmThreadCharacteristics&) = delete;
-  ScopedMmThreadCharacteristics& operator=(
-      const ScopedMmThreadCharacteristics&) = delete;
+  MmThreadCharacteristicsRegistration(
+      const MmThreadCharacteristicsRegistration&) = delete;
+  MmThreadCharacteristicsRegistration& operator=(
+      const MmThreadCharacteristicsRegistration&) = delete;
 
  private:
   // Opaque AVRT registration handle; null when MMCSS registration fails.
@@ -95,7 +101,7 @@ void RunDeviceAudioThreadLoop(AudioDevice& device, std::stop_token stoken,
   // duration.
   constexpr DWORD kPollIntervalMs = 5;
 
-  const ScopedMmThreadCharacteristics pro_audio_task(L"Pro Audio");
+  const MmThreadCharacteristicsRegistration pro_audio_task(L"Pro Audio");
 
   const AudioPipelineInterface::Status start = device.StartStreams();
   if (!start.ok()) {
