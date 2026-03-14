@@ -14,23 +14,33 @@
 
 #include "audio_device.hpp"
 
+// Concrete `AudioDevice` that owns the real WASAPI render endpoint, process
+// loopback capture client, and stream recovery path.
 class WasapiAudioDevice final : public AudioDevice {
  public:
+  // Preconfigured WASAPI clients, services, and endpoint metadata that can be
+  // injected at construction time instead of discovered through `Open()`.
   struct Dependencies {
+    // Shared-mode loopback capture client to own.
     IAudioClient* capture_client = nullptr;
+    // Shared-mode render client to own.
     IAudioClient* render_client = nullptr;
+    // Packet-reading service acquired from `capture_client`.
     IAudioCaptureClient* capture_service = nullptr;
+    // Buffer-writing service acquired from `render_client`.
     IAudioRenderClient* render_service = nullptr;
+    // Render mix format that also defines the loopback capture format.
     WAVEFORMATEX* format = nullptr;
+    // Friendly name to report from `endpoint_name()`.
     std::wstring endpoint_name;
   };
 
+  // Creates an unopened device that discovers the default render endpoint and
+  // stream clients on demand through `Open()`.
   WasapiAudioDevice();
-  // Allows construction with preconfigured clients, services, and format.
-  // `format` follows the same `CoTaskMemFree` ownership convention as `Open()`.
-  // This exists so tests can cover the public contract without real hardware;
-  // the lower-coverage gap is still the real endpoint activation path in
-  // `Open()`, not the read/write/recovery behavior seeded here.
+  // Creates a device from `dependencies`, which transfers ownership of the
+  // supplied clients, services, format, and endpoint metadata. `format`
+  // follows the same `CoTaskMemFree` ownership convention as `Open()`.
   explicit WasapiAudioDevice(Dependencies dependencies);
   ~WasapiAudioDevice() override;
 
@@ -51,11 +61,12 @@ class WasapiAudioDevice final : public AudioDevice {
   // Reads one capture packet from the loopback stream and decodes it into
   // interleaved stereo float samples.
   [[nodiscard]] CapturePacket ReadNextPacket() override;
-  // Writes interleaved stereo float samples into the render client's next
-  // available buffer.
+  // Writes interleaved stereo float samples from `pcm` into the render
+  // client's next available buffer.
   [[nodiscard]] HRESULT WriteRenderPacket(
       std::span<const float> pcm) override;
-  // Reopens and restarts the stream pair after a recoverable WASAPI failure.
+  // Reopens and restarts the stream pair after the recoverable WASAPI
+  // `failure` that stopped the current stream clients.
   [[nodiscard]] bool TryRecover(HRESULT failure) override;
 
   // Returns the current render mix rate in Hz, or 0 until `Open()` succeeds.
