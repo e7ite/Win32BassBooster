@@ -106,6 +106,16 @@ both the GUI and test targets.
 Open **Ctrl+Shift+P -> CMake: Select Build Preset** and choose **release** or
 **debug**.
 
+### Select a test preset
+
+Open **Ctrl+Shift+P -> CMake: Select Test Preset** and choose the preset that
+matches your build preset:
+
+```text
+release build preset -> release test preset
+debug build preset -> debug test preset
+```
+
 ### Build
 
 Press **F7**, click the **Build** button in the status bar, or run:
@@ -136,6 +146,11 @@ individual tests, or run all tests at once:
 ```text
 Ctrl+Shift+P -> CMake: Run Tests
 ```
+
+The active configure, build, and test presets are shown in the VS Code status
+bar. If `CTest` reports that it cannot find an executable under
+`build\bin\Release\...` after you built `Debug` (or the reverse), the selected
+test preset does not match the build preset.
 
 ### Run or debug the application
 

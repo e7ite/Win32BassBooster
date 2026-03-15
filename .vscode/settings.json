@@ -15,6 +15,18 @@
   // the VSCode extension host does not inherit the system PATH on Windows.
   "C_Cpp.clang_format_path": "C:/Program Files/LLVM/bin/clang-format.exe",
   "cmake.useCMakePresets": "always",
+  "cmake.buildBeforeRun": true,
+  "cmake.options.advanced": {
+    "configurePreset": {
+      "statusBarVisibility": "visible"
+    },
+    "buildPreset": {
+      "statusBarVisibility": "visible"
+    },
+    "testPreset": {
+      "statusBarVisibility": "visible"
+    }
+  },
 
   // -------------------------------------------------------------------------
   // clang-tidy: run automatically on open / save via the cpptools code-analysis
