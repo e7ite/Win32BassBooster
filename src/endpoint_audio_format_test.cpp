@@ -96,31 +96,46 @@ TEST(EndpointAudioFormatTest, AcceptsExtensibleFloat32Stereo) {
 }
 
 TEST(EndpointAudioFormatTest, DecodeMono16DuplicatesChannel) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
   constexpr size_t kMono16TwoFrameByteCount = 4;
+  constexpr size_t kStereoSamplesForTwoFrames = 4;
+  constexpr float kDecodeTolerance = 1e-5F;
+  constexpr float kHalfScale = 0.5F;
+  constexpr WORD kBitsPerSample16 = 16;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_PCM,
-                                          .channels = kSharedMonoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample16});
+                                          .channels = 1,
+                                          .bits_per_sample = kBitsPerSample16},
+                                         kDefaultSampleRateHz);
+
+  // 16-bit PCM samples are little-endian signed integers; 0x4000 = 16384
+  // which is 16384/32768 = +0.5, and 0xC000 = -16384 which is -0.5.
   const std::array<uint8_t, kMono16TwoFrameByteCount> src = {0x00, 0x40, 0x00,
                                                              0xC0};
 
   const StereoPcmBuffer decoded =
-      DecodeToStereoFloat(src.data(), kSharedTwoFrames, format);
+      DecodeToStereoFloat(src.data(), 2, format);
 
-  ASSERT_EQ(decoded.frames, kSharedTwoFrames);
-  ASSERT_EQ(decoded.samples.size(), kSharedStereoSamplesForTwoFrames);
-  EXPECT_NEAR(decoded.samples[0], kSharedHalfScale, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[1], kSharedHalfScale, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[2], kSharedNegativeHalfScale, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[3], kSharedNegativeHalfScale, kSharedDecodeTolerance);
+  ASSERT_EQ(decoded.frames, 2U);
+  ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
+  EXPECT_NEAR(decoded.samples[0], kHalfScale, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[1], kHalfScale, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[2], -kHalfScale, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[3], -kHalfScale, kDecodeTolerance);
 }
 
 TEST(EndpointAudioFormatTest, DecodeStereo16PreservesLeftRightLanes) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
   constexpr size_t kStereo16TwoFrameByteCount = 8;
+  constexpr size_t kStereoSamplesForTwoFrames = 4;
+  constexpr float kDecodeTolerance = 1e-5F;
+  constexpr float kHalfScale = 0.5F;
   constexpr float kQuarterScale = 0.25F;
   constexpr float kNegativeQuarterScale = -0.25F;
+  constexpr WORD kBitsPerSample16 = 16;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_PCM,
-                                          .channels = kSharedStereoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample16});
+                                          .channels = 2,
+                                          .bits_per_sample = kBitsPerSample16},
+                                         kDefaultSampleRateHz);
   const std::array<uint8_t, kStereo16TwoFrameByteCount> src = {
       0x00, 0x40,  // frame 0 left: +0.5
       0x00, 0xC0,  // frame 0 right: -0.5
@@ -129,32 +144,39 @@ TEST(EndpointAudioFormatTest, DecodeStereo16PreservesLeftRightLanes) {
   };
 
   const StereoPcmBuffer decoded =
-      DecodeToStereoFloat(src.data(), kSharedTwoFrames, format);
+      DecodeToStereoFloat(src.data(), 2, format);
 
-  ASSERT_EQ(decoded.frames, kSharedTwoFrames);
-  ASSERT_EQ(decoded.samples.size(), kSharedStereoSamplesForTwoFrames);
-  EXPECT_NEAR(decoded.samples[0], kSharedHalfScale, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[1], kSharedNegativeHalfScale, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[2], kQuarterScale, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[3], kNegativeQuarterScale, kSharedDecodeTolerance);
+  ASSERT_EQ(decoded.frames, 2U);
+  ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
+  EXPECT_NEAR(decoded.samples[0], kHalfScale, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[1], -kHalfScale, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[2], kQuarterScale, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[3], kNegativeQuarterScale, kDecodeTolerance);
 }
 
 TEST(EndpointAudioFormatTest, DecodeMono24PreservesSamplePolarity) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
   constexpr size_t kMono24TwoFrameByteCount = 6;
+  constexpr size_t kStereoSamplesForTwoFrames = 4;
   constexpr float kStrongPolarityThreshold = 0.99F;
+  constexpr WORD kBitsPerSample24 = 24;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_PCM,
-                                          .channels = kSharedMonoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample24});
+                                          .channels = 1,
+                                          .bits_per_sample = kBitsPerSample24},
+                                         kDefaultSampleRateHz);
+
+  // 24-bit PCM samples are 3-byte little-endian two's complement values.
+  // 0x7FFFFF is the largest positive value; 0x800000 is the most negative.
   const std::array<uint8_t, kMono24TwoFrameByteCount> src = {
       0xFF, 0xFF, 0x7F,  // frame 0: max positive 24-bit
       0x00, 0x00, 0x80,  // frame 1: max negative 24-bit
   };
 
   const StereoPcmBuffer decoded =
-      DecodeToStereoFloat(src.data(), kSharedTwoFrames, format);
+      DecodeToStereoFloat(src.data(), 2, format);
 
-  ASSERT_EQ(decoded.frames, kSharedTwoFrames);
-  ASSERT_EQ(decoded.samples.size(), kSharedStereoSamplesForTwoFrames);
+  ASSERT_EQ(decoded.frames, 2U);
+  ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
   EXPECT_GT(decoded.samples[0], kStrongPolarityThreshold);
   EXPECT_GT(decoded.samples[1], kStrongPolarityThreshold);
   EXPECT_LT(decoded.samples[2], -kStrongPolarityThreshold);
