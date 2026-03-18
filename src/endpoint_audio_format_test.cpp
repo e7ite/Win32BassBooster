@@ -18,7 +18,6 @@ constexpr WORD kSharedStereoChannelCount = 2;
 constexpr WORD kSharedBitsPerSample16 = 16;
 constexpr WORD kSharedBitsPerSample24 = 24;
 constexpr WORD kSharedBitsPerSample32 = 32;
-constexpr WORD kBitsPerByte = 8;
 constexpr uint32_t kSharedTwoFrames = 2;
 constexpr size_t kSharedStereoSamplesForTwoFrames = 4;
 constexpr float kSharedDecodeTolerance = 1e-5F;
@@ -33,47 +32,63 @@ struct FormatSpec {
   WORD bits_per_sample;
 };
 
-WAVEFORMATEX MakeFormat(FormatSpec spec) {
+WAVEFORMATEX MakeFormat(FormatSpec spec,
+                        DWORD sample_rate = kSharedDefaultSampleRateHz) {
+  constexpr int kBitsPerByte = 8;
   WAVEFORMATEX format = {};
   format.wFormatTag = spec.tag;
   format.nChannels = spec.channels;
   format.wBitsPerSample = spec.bits_per_sample;
   format.nBlockAlign =
       static_cast<WORD>(spec.channels * (spec.bits_per_sample / kBitsPerByte));
-  format.nAvgBytesPerSec = kSharedDefaultSampleRateHz * format.nBlockAlign;
-  format.nSamplesPerSec = kSharedDefaultSampleRateHz;
+  format.nAvgBytesPerSec = sample_rate * format.nBlockAlign;
+  format.nSamplesPerSec = sample_rate;
   return format;
 }
 
 TEST(EndpointAudioFormatTest, AcceptsPackedFloat32Stereo) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr WORD kBitsPerSample32 = 32;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
-                                          .channels = kSharedStereoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample32});
+                                          .channels = 2,
+                                          .bits_per_sample = kBitsPerSample32},
+                                         kDefaultSampleRateHz);
 
   EXPECT_TRUE(SupportsDirectStereoFloatCopy(format));
 }
 
 TEST(EndpointAudioFormatTest, RejectsFloat32Mono) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr WORD kBitsPerSample32 = 32;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
-                                          .channels = kSharedMonoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample32});
+                                          .channels = 1,
+                                          .bits_per_sample = kBitsPerSample32},
+                                         kDefaultSampleRateHz);
 
   EXPECT_FALSE(SupportsDirectStereoFloatCopy(format));
 }
 
 TEST(EndpointAudioFormatTest, RejectsPcm16Stereo) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr WORD kBitsPerSample16 = 16;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_PCM,
-                                          .channels = kSharedStereoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample16});
+                                          .channels = 2,
+                                          .bits_per_sample = kBitsPerSample16},
+                                         kDefaultSampleRateHz);
 
   EXPECT_FALSE(SupportsDirectStereoFloatCopy(format));
 }
 
 TEST(EndpointAudioFormatTest, AcceptsExtensibleFloat32Stereo) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr WORD kBitsPerSample32 = 32;
   WAVEFORMATEXTENSIBLE format = {};
   format.Format = MakeFormat({.tag = WAVE_FORMAT_EXTENSIBLE,
-                              .channels = kSharedStereoChannelCount,
-                              .bits_per_sample = kSharedBitsPerSample32});
+                              .channels = 2,
+                              .bits_per_sample = kBitsPerSample32},
+                             kDefaultSampleRateHz);
+  // `cbSize` must describe the extra bytes beyond the base `WAVEFORMATEX`
+  // header for WASAPI to recognize the extensible format correctly.
   format.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
   format.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 
