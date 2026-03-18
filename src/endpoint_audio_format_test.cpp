@@ -184,29 +184,37 @@ TEST(EndpointAudioFormatTest, DecodeMono24PreservesSamplePolarity) {
 }
 
 TEST(EndpointAudioFormatTest, DecodeStereoFloat32ReturnsIdentity) {
-  const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
-                                          .channels = kSharedStereoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample32});
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr size_t kStereoSamplesForTwoFrames = 4;
+  constexpr float kDecodeTolerance = 1e-5F;
   constexpr float kLeft = 0.75F;
   constexpr float kRight = -0.25F;
+  constexpr WORD kBitsPerSample32 = 32;
+  const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
+                                          .channels = 2,
+                                          .bits_per_sample = kBitsPerSample32},
+                                         kDefaultSampleRateHz);
   // Two stereo frames of float32: [L0, R0, L1, R1].
   const float src[] = {kLeft, kRight, kRight, kLeft};
 
   const StereoPcmBuffer decoded = DecodeToStereoFloat(
-      reinterpret_cast<const BYTE*>(src), kSharedTwoFrames, format);
+      reinterpret_cast<const BYTE*>(src), 2, format);
 
-  ASSERT_EQ(decoded.frames, kSharedTwoFrames);
-  ASSERT_EQ(decoded.samples.size(), kSharedStereoSamplesForTwoFrames);
-  EXPECT_NEAR(decoded.samples[0], kLeft, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[1], kRight, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[2], kRight, kSharedDecodeTolerance);
-  EXPECT_NEAR(decoded.samples[3], kLeft, kSharedDecodeTolerance);
+  ASSERT_EQ(decoded.frames, 2U);
+  ASSERT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
+  EXPECT_NEAR(decoded.samples[0], kLeft, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[1], kRight, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[2], kRight, kDecodeTolerance);
+  EXPECT_NEAR(decoded.samples[3], kLeft, kDecodeTolerance);
 }
 
 TEST(EndpointAudioFormatTest, DecodeStereoInt32PreservesPolarity) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr WORD kBitsPerSample32 = 32;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_PCM,
-                                          .channels = kSharedStereoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample32});
+                                          .channels = 2,
+                                          .bits_per_sample = kBitsPerSample32},
+                                         kDefaultSampleRateHz);
   // Max positive and max negative 32-bit samples.
   constexpr int32_t kMaxPos = 0x7FFFFFFF;
   constexpr int32_t kMaxNeg = static_cast<int32_t>(0x80000000);
@@ -214,9 +222,9 @@ TEST(EndpointAudioFormatTest, DecodeStereoInt32PreservesPolarity) {
   constexpr float kStrongThreshold = 0.99F;
 
   const StereoPcmBuffer decoded = DecodeToStereoFloat(
-      reinterpret_cast<const BYTE*>(src), kSharedTwoFrames, format);
+      reinterpret_cast<const BYTE*>(src), 2, format);
 
-  ASSERT_EQ(decoded.frames, kSharedTwoFrames);
+  ASSERT_EQ(decoded.frames, 2U);
   EXPECT_GT(decoded.samples[0], kStrongThreshold);
   EXPECT_LT(decoded.samples[1], -kStrongThreshold);
   EXPECT_LT(decoded.samples[2], -kStrongThreshold);
@@ -224,9 +232,12 @@ TEST(EndpointAudioFormatTest, DecodeStereoInt32PreservesPolarity) {
 }
 
 TEST(EndpointAudioFormatTest, DecodeZeroFramesReturnsEmptyBuffer) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr WORD kBitsPerSample32 = 32;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
-                                          .channels = kSharedStereoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample32});
+                                          .channels = 2,
+                                          .bits_per_sample = kBitsPerSample32},
+                                         kDefaultSampleRateHz);
   const float src[] = {1.0F, 1.0F};
 
   const StereoPcmBuffer decoded = DecodeToStereoFloat(
@@ -237,32 +248,38 @@ TEST(EndpointAudioFormatTest, DecodeZeroFramesReturnsEmptyBuffer) {
 }
 
 TEST(EndpointAudioFormatTest, DecodeNullSrcReturnsEmptyBuffer) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
+  constexpr WORD kBitsPerSample32 = 32;
   const WAVEFORMATEX format = MakeFormat({.tag = WAVE_FORMAT_IEEE_FLOAT,
-                                          .channels = kSharedStereoChannelCount,
-                                          .bits_per_sample = kSharedBitsPerSample32});
+                                          .channels = 2,
+                                          .bits_per_sample = kBitsPerSample32},
+                                         kDefaultSampleRateHz);
   const StereoPcmBuffer decoded =
-      DecodeToStereoFloat(/*src=*/nullptr, kSharedTwoFrames, format);
+      DecodeToStereoFloat(/*src=*/nullptr, 2, format);
 
   EXPECT_EQ(decoded.frames, 0U);
   EXPECT_TRUE(decoded.samples.empty());
 }
 
 TEST(EndpointAudioFormatTest, DecodeUnknownFormatReturnsZeroFilledBuffer) {
+  constexpr DWORD kDefaultSampleRateHz = 48000;
   constexpr WORD kBitsPerSample12 = 12;
+  constexpr size_t kStereoSamplesForTwoFrames = 4;
+  constexpr float kDecodeTolerance = 1e-5F;
   WAVEFORMATEX format = {};
   format.wFormatTag = WAVE_FORMAT_PCM;
-  format.nChannels = kSharedStereoChannelCount;
+  format.nChannels = 2;
   format.wBitsPerSample = kBitsPerSample12;
   format.nBlockAlign = 3;
-  format.nSamplesPerSec = kSharedDefaultSampleRateHz;
+  format.nSamplesPerSec = kDefaultSampleRateHz;
   const uint8_t src[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-  const StereoPcmBuffer decoded = DecodeToStereoFloat(src, kSharedTwoFrames, format);
+  const StereoPcmBuffer decoded = DecodeToStereoFloat(src, 2, format);
 
   // Unknown format: buffer is allocated but samples are zero.
-  EXPECT_EQ(decoded.frames, kSharedTwoFrames);
-  EXPECT_EQ(decoded.samples.size(), kSharedStereoSamplesForTwoFrames);
-  EXPECT_NEAR(decoded.samples[0], 0.0F, kSharedDecodeTolerance);
+  EXPECT_EQ(decoded.frames, 2U);
+  EXPECT_EQ(decoded.samples.size(), kStereoSamplesForTwoFrames);
+  EXPECT_NEAR(decoded.samples[0], 0.0F, kDecodeTolerance);
 }
 
 TEST(EndpointAudioFormatTest, RejectsExtensiblePcm16StereoAsDirectCopy) {
