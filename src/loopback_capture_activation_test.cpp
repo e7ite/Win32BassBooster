@@ -35,9 +35,11 @@ TEST(LoopbackCaptureActivationTest, FailsWithoutComInitialization) {
 TEST(LoopbackCaptureActivationTest, SucceedsWithComInitialized) {
   // Keep COM setup and teardown explicit in the test body so the lifetime is
   // obvious and there is no helper logic hiding cleanup behavior.
+  // `S_FALSE` means COM was already initialized on this thread; both `S_OK`
+  // and `S_FALSE` pass the `SUCCEEDED` check.
   const HRESULT com_init =
       CoInitializeEx(/*pvReserved=*/nullptr, COINIT_MULTITHREADED);
-  ASSERT_TRUE(SUCCEEDED(com_init) || com_init == S_FALSE);
+  ASSERT_TRUE(SUCCEEDED(com_init));
 
   IAudioClient* client = nullptr;
 
