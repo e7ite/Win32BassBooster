@@ -10,18 +10,13 @@
 
 namespace {
 
-constexpr double kSampleRate = 48000.0;
-
-// Shared across multiple tests that need a mix of positive/negative samples.
-constexpr float kBufSampleA = 0.5F;
-constexpr float kBufSampleB = 0.3F;
-constexpr float kBufSampleC = 0.8F;
-
-constexpr double kGain12dB = 12.0;
-
 // At 0 dB the shelf filter is transparent (H(z) = 1); every output sample must
 // exactly equal the corresponding input.
 TEST(BassBoostFilterTest, ZeroGainIsUnity) {
+  constexpr double kSampleRate = 48000.0;
+  constexpr float kBufSampleA = 0.5F;
+  constexpr float kBufSampleB = 0.3F;
+  constexpr float kBufSampleC = 0.8F;
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(0.0);
   float buf[] = {kBufSampleA,  kBufSampleA, -kBufSampleB,
@@ -39,7 +34,9 @@ TEST(BassBoostFilterTest, ZeroGainIsUnity) {
 // H(DC) = (b0 + b1 + b2) / (1 + a1 + a2): the exact zero-frequency gain. A
 // low shelf at +12 dB must amplify DC by more than 1.5x.
 TEST(BassBoostFilterTest, BassBoostedAt100Hz) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kGain12dB = 12.0;
   filter.SetGainDb(kGain12dB);
   const BiquadCoeffs& coeffs = filter.coefficients();
 
@@ -53,6 +50,7 @@ TEST(BassBoostFilterTest, BassBoostedAt100Hz) {
 // sit near z = 1, so the response at z = -1 is essentially unity and the
 // transient resolves within a few samples.
 TEST(BassBoostFilterTest, HighFreqUnaffected) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
   constexpr double kGain15dB = 15.0;
   filter.SetGainDb(kGain15dB);
@@ -67,6 +65,7 @@ TEST(BassBoostFilterTest, HighFreqUnaffected) {
 }
 
 TEST(BassBoostFilterTest, GainClampedAtMax) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(100.0);
 
@@ -74,8 +73,9 @@ TEST(BassBoostFilterTest, GainClampedAtMax) {
 }
 
 TEST(BassBoostFilterTest, GainClampedAtMin) {
-  constexpr double kBelowMinGainDb = -5.0;
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kBelowMinGainDb = -5.0;
   filter.SetGainDb(kBelowMinGainDb);
 
   EXPECT_GE(filter.gain_db(), BassBoostFilter::kMinGainDb);
@@ -83,7 +83,9 @@ TEST(BassBoostFilterTest, GainClampedAtMin) {
 
 // Prime the delay lines, reset, then verify zero input gives zero output.
 TEST(BassBoostFilterTest, ResetClearsDelayLineState) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kGain12dB = 12.0;
   filter.SetGainDb(kGain12dB);
   float signal[] = {1.0F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F};
   filter.ProcessStereo(signal);
@@ -100,6 +102,7 @@ TEST(BassBoostFilterTest, ResetClearsDelayLineState) {
 }
 
 TEST(BassBoostFilterTest, CoefficientsFiniteAtZeroGain) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(0.0);
 
@@ -111,8 +114,9 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtZeroGain) {
 }
 
 TEST(BassBoostFilterTest, CoefficientsFiniteAtHalfMaxGain) {
-  constexpr double kHalfMaxGain = BassBoostFilter::kMaxGainDb / 2.0;
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kHalfMaxGain = BassBoostFilter::kMaxGainDb / 2.0;
   filter.SetGainDb(kHalfMaxGain);
 
   EXPECT_TRUE(std::isfinite(filter.coefficients().b0));
@@ -123,6 +127,7 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtHalfMaxGain) {
 }
 
 TEST(BassBoostFilterTest, CoefficientsFiniteAtMaxGain) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
   filter.SetGainDb(BassBoostFilter::kMaxGainDb);
 
@@ -134,12 +139,16 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtMaxGain) {
 }
 
 TEST(BassBoostFilterTest, MonoChannel0MatchesStereoChannel0) {
-  constexpr double kGain10dB = 10.0;
+  constexpr double kSampleRate = 48000.0;
+  constexpr float kBufSampleA = 0.5F;
+  constexpr float kBufSampleB = 0.3F;
+  constexpr float kBufSampleC = 0.8F;
   constexpr float kStereoR0 = 0.7F;
   constexpr float kStereoR1 = 0.2F;
   constexpr float kStereoR2 = 0.4F;
   BassBoostFilter filter1(kSampleRate);
   BassBoostFilter filter2(kSampleRate);
+  constexpr double kGain10dB = 10.0;
 
   filter1.SetGainDb(kGain10dB);
   filter2.SetGainDb(kGain10dB);
@@ -158,26 +167,29 @@ TEST(BassBoostFilterTest, MonoChannel0MatchesStereoChannel0) {
 }
 
 TEST(BassBoostFilterTest, FrequencyAccessorReturnsSetValue) {
-  constexpr double kTestFrequency = 200.0;
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
 
+  constexpr double kTestFrequency = 200.0;
   filter.SetFrequency(kTestFrequency);
 
   EXPECT_NEAR(filter.frequency(), kTestFrequency, 0.001);
 }
 
 TEST(BassBoostFilterTest, FrequencyClampedAboveNyquistGuard) {
-  constexpr double kAboveNyquist = 100'000.0;
-  constexpr double kNyquistGuardRatio = 0.4;
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
 
+  constexpr double kAboveNyquist = 100'000.0;
   filter.SetFrequency(kAboveNyquist);
 
+  constexpr double kNyquistGuardRatio = 0.4;
   // 0.4 * 48000 = 19200 Hz is the upper limit.
   EXPECT_LE(filter.frequency(), kSampleRate * kNyquistGuardRatio);
 }
 
 TEST(BassBoostFilterTest, FrequencyClampedBelowMinimum) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
 
   filter.SetFrequency(1.0);
@@ -186,6 +198,7 @@ TEST(BassBoostFilterTest, FrequencyClampedBelowMinimum) {
 }
 
 TEST(BassBoostFilterTest, GainAtExactMinBoundary) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
 
   filter.SetGainDb(BassBoostFilter::kMinGainDb);
@@ -194,6 +207,7 @@ TEST(BassBoostFilterTest, GainAtExactMinBoundary) {
 }
 
 TEST(BassBoostFilterTest, GainAtExactMaxBoundary) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
 
   filter.SetGainDb(BassBoostFilter::kMaxGainDb);
@@ -203,7 +217,7 @@ TEST(BassBoostFilterTest, GainAtExactMaxBoundary) {
 
 // Right channel processed in mono should match the right channel of stereo.
 TEST(BassBoostFilterTest, MonoChannel1MatchesStereoChannel1) {
-  constexpr double kGain10dB = 10.0;
+  constexpr double kSampleRate = 48000.0;
   constexpr float kLeftA = 0.1F;
   constexpr float kLeftB = 0.2F;
   constexpr float kLeftC = 0.3F;
@@ -212,6 +226,7 @@ TEST(BassBoostFilterTest, MonoChannel1MatchesStereoChannel1) {
   constexpr float kRightC = 0.9F;
   BassBoostFilter stereo_filter(kSampleRate);
   BassBoostFilter mono_filter(kSampleRate);
+  constexpr double kGain10dB = 10.0;
 
   stereo_filter.SetGainDb(kGain10dB);
   mono_filter.SetGainDb(kGain10dB);
@@ -229,7 +244,9 @@ TEST(BassBoostFilterTest, MonoChannel1MatchesStereoChannel1) {
 }
 
 TEST(BassBoostFilterTest, ProcessStereoEmptyBufferIsNoOp) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kGain12dB = 12.0;
   filter.SetGainDb(kGain12dB);
   std::span<float> empty;
 
@@ -243,7 +260,9 @@ TEST(BassBoostFilterTest, ProcessStereoEmptyBufferIsNoOp) {
 }
 
 TEST(BassBoostFilterTest, ProcessMonoEmptyBufferIsNoOp) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kGain12dB = 12.0;
   filter.SetGainDb(kGain12dB);
   std::span<float> empty;
 
@@ -256,7 +275,9 @@ TEST(BassBoostFilterTest, ProcessMonoEmptyBufferIsNoOp) {
 }
 
 TEST(BassBoostFilterTest, SetSampleRateUpdatesCoefficients) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kGain12dB = 12.0;
   filter.SetGainDb(kGain12dB);
   const BiquadCoeffs before = filter.coefficients();
 
@@ -292,9 +313,11 @@ TEST(BassBoostFilterTest, CoefficientsFiniteAtHighSampleRate) {
 
 // Higher gain must produce a larger DC amplification factor.
 TEST(BassBoostFilterTest, DcGainIncreasesWithGainDb) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter low_filter(kSampleRate);
   BassBoostFilter high_filter(kSampleRate);
   constexpr double kLowGain = 3.0;
+  constexpr double kGain12dB = 12.0;
   low_filter.SetGainDb(kLowGain);
   high_filter.SetGainDb(kGain12dB);
 
@@ -308,7 +331,9 @@ TEST(BassBoostFilterTest, DcGainIncreasesWithGainDb) {
 
 // Changing frequency should alter coefficients.
 TEST(BassBoostFilterTest, FrequencyChangeUpdatesCoefficients) {
+  constexpr double kSampleRate = 48000.0;
   BassBoostFilter filter(kSampleRate);
+  constexpr double kGain12dB = 12.0;
   filter.SetGainDb(kGain12dB);
   const BiquadCoeffs at_100 = filter.coefficients();
 
