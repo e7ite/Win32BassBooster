@@ -144,6 +144,7 @@ TEST(AudioPipelineTest, BoostLevelClampedBelowZero) {
 TEST(AudioPipelineTest, StopBeforeStartIsSafe) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, StopStreams()).Times(0);
+  // `Close()` is called once by `Stop()` and once by the destructor.
   EXPECT_CALL(*device, Close()).Times(2);
   AudioPipeline pipeline(std::move(device));
 
@@ -237,7 +238,11 @@ TEST(AudioPipelineTest, StartSucceedsWithInjectedDevice) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(0.0));
+  // `Start()` always initializes `filter_` from `device.sample_rate()` before
+  // it reports success. This test does not assert on DSP behavior, so a normal
+  // 48 kHz rate keeps the setup realistic without adding extra expectations.
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Configured Test Device")));
   EXPECT_CALL(*device, StartStreams())
@@ -257,7 +262,8 @@ TEST(AudioPipelineTest, StartStreamsFailureStopsPipeline) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
@@ -275,7 +281,8 @@ TEST(AudioPipelineTest, StartWhileRunningReturnsOk) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
@@ -295,7 +302,8 @@ TEST(AudioPipelineTest, BoostLevelUpdatesWhileRunning) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
@@ -313,10 +321,12 @@ TEST(AudioPipelineTest, BoostLevelUpdatesWhileRunning) {
 TEST(AudioPipelineTest, StopAfterStartCleansUpResources) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, StopStreams()).Times(1);
+  // `Close()` is called once by `Stop()` and once by the destructor.
   EXPECT_CALL(*device, Close()).Times(2);
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Configured Test Device")));
   EXPECT_CALL(*device, StartStreams())
@@ -338,7 +348,8 @@ TEST(AudioPipelineTest, NonSilentPacketIsProcessedAndRendered) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
@@ -346,11 +357,11 @@ TEST(AudioPipelineTest, NonSilentPacketIsProcessedAndRendered) {
   std::promise<void> queue_drained;
   std::future<void> queue_drained_future = queue_drained.get_future();
   int render_call_count = 0;
-  CapturePacket packet;
-  packet.frames = 2;
-  packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
+  constexpr float kSampleA = 0.5F;
+  constexpr float kSampleB = 0.3F;
   EXPECT_CALL(*device, ReadNextPacket())
-      .WillOnce(Return(packet))
+      .WillOnce(Return(CapturePacket{
+          .samples = {kSampleA, -kSampleA, kSampleB, -kSampleB}, .frames = 2}))
       .WillOnce([&queue_drained] {
         queue_drained.set_value();
         return CapturePacket{};
@@ -375,19 +386,21 @@ TEST(AudioPipelineTest, SilentPacketIsNotRendered) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
   std::promise<void> queue_drained;
   std::future<void> queue_drained_future = queue_drained.get_future();
-  CapturePacket packet;
-  packet.frames = 2;
-  packet.silent = true;
-  packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
+  constexpr float kSampleA = 0.5F;
+  constexpr float kSampleB = 0.3F;
   EXPECT_CALL(*device, ReadNextPacket())
-      .WillOnce(Return(packet))
+      .WillOnce(Return(
+          CapturePacket{.samples = {kSampleA, -kSampleA, kSampleB, -kSampleB},
+                        .frames = 2,
+                        .silent = true}))
       .WillOnce([&queue_drained] {
         queue_drained.set_value();
         return CapturePacket{};
@@ -405,7 +418,8 @@ TEST(AudioPipelineTest, RenderedDeltaIsClamped) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
@@ -413,11 +427,11 @@ TEST(AudioPipelineTest, RenderedDeltaIsClamped) {
   std::promise<void> queue_drained;
   std::future<void> queue_drained_future = queue_drained.get_future();
   std::vector<float> rendered_samples;
-  CapturePacket packet;
-  packet.frames = 2;
-  packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
+  constexpr float kSampleA = 0.5F;
+  constexpr float kSampleB = 0.3F;
   EXPECT_CALL(*device, ReadNextPacket())
-      .WillOnce(Return(packet))
+      .WillOnce(Return(CapturePacket{
+          .samples = {kSampleA, -kSampleA, kSampleB, -kSampleB}, .frames = 2}))
       .WillOnce([&queue_drained] {
         queue_drained.set_value();
         return CapturePacket{};
@@ -442,16 +456,16 @@ TEST(AudioPipelineTest, FailedReadWithoutRecoveryStopsPipeline) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
   std::promise<void> recover_attempted;
   std::future<void> recover_attempted_future = recover_attempted.get_future();
-  CapturePacket failed_packet;
-  failed_packet.status = E_FAIL;
-  EXPECT_CALL(*device, ReadNextPacket()).WillOnce(Return(failed_packet));
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(CapturePacket{.status = E_FAIL}));
   EXPECT_CALL(*device, TryRecover(E_FAIL))
       .WillOnce([&recover_attempted](HRESULT /*failure*/) {
         recover_attempted.set_value();
@@ -471,17 +485,19 @@ TEST(AudioPipelineTest, FailedRenderWithoutRecoveryStopsPipeline) {
   auto device = std::make_unique<MockAudioDevice>();
   EXPECT_CALL(*device, Open())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(48000.0));
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
   std::promise<void> recover_attempted;
   std::future<void> recover_attempted_future = recover_attempted.get_future();
-  CapturePacket packet;
-  packet.frames = 2;
-  packet.samples = {0.5F, -0.5F, 0.3F, -0.3F};
-  EXPECT_CALL(*device, ReadNextPacket()).WillOnce(Return(packet));
+  constexpr float kSampleA = 0.5F;
+  constexpr float kSampleB = 0.3F;
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(CapturePacket{
+          .samples = {kSampleA, -kSampleA, kSampleB, -kSampleB}, .frames = 2}));
   EXPECT_CALL(*device, WriteRenderPacket(_)).WillOnce(Return(E_FAIL));
   EXPECT_CALL(*device, TryRecover(E_FAIL))
       .WillOnce([&recover_attempted](HRESULT /*failure*/) {
@@ -505,20 +521,20 @@ TEST(AudioPipelineTest, RecoverableFailureRefreshesFilterSampleRate) {
   std::promise<void> sample_rate_refreshed;
   std::future<void> sample_rate_refreshed_future =
       sample_rate_refreshed.get_future();
+  constexpr double kSampleRateHz = 48000.0;
   EXPECT_CALL(*device, sample_rate())
-      .WillOnce(Return(48000.0))
+      .WillOnce(Return(kSampleRateHz))
       .WillOnce([&sample_rate_refreshed] {
         sample_rate_refreshed.set_value();
-        return 44100.0;
+        constexpr double kNewSampleRateHz = 44100.0;
+        return kNewSampleRateHz;
       });
   EXPECT_CALL(*device, endpoint_name())
       .WillRepeatedly(ReturnRefOfCopy(std::wstring(L"Test Device")));
   EXPECT_CALL(*device, StartStreams())
       .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
-  CapturePacket failed_packet;
-  failed_packet.status = AUDCLNT_E_DEVICE_INVALIDATED;
   EXPECT_CALL(*device, ReadNextPacket())
-      .WillOnce(Return(failed_packet))
+      .WillOnce(Return(CapturePacket{.status = AUDCLNT_E_DEVICE_INVALIDATED}))
       .WillRepeatedly(Return(CapturePacket{}));
   EXPECT_CALL(*device, TryRecover(AUDCLNT_E_DEVICE_INVALIDATED))
       .WillOnce(Return(true));

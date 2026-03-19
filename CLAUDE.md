@@ -178,7 +178,10 @@ std::array<double, kChannels> z2_ = {};
   correct form.
 - Prefer guard clauses and early returns to flatten control flow.
 - Separate logical units inside a function with a blank line so setup,
-  validation, mutation, and handoff steps are easy to scan quickly.
+  validation, mutation, and handoff steps are easy to scan quickly. Group
+  statements by the concept they belong to, not by statement kind. When a
+  function sets up multiple independent inputs, keep each input's
+  declarations, configuration, and related calls together as one block.
 - If a change would only be possible by adding deeper nesting, stop and report
   the constraint.
 - Prefer simple constructs first (`if`, loops, anonymous-namespace helpers,
@@ -635,6 +638,9 @@ MockAudioEngine audio_engine;
 ### Local variables
 - Introduce a local variable only when its name adds clarity, it factors out a
   repeated expression, or it must live across statements.
+- Declare each variable as close as possible to the statement that first uses
+  it. Do not group all declarations at the top of a function or block; place
+  each one immediately before the call or expression that consumes it.
 - Avoid single-use temporary variables whose names add no information.
 
 ```cpp
@@ -1322,6 +1328,48 @@ TEST(ToneFilterTest, ControlAtOneSetsZeroLevel) {
 }
 ```
 
+- Declare each variable as close as possible to the statement that first uses
+  it. Do not group all declarations at the top of the test; place each one
+  immediately before the `EXPECT_CALL`, function call, or expression that
+  consumes it.
+- The general "group by concept, not by statement kind" rule from the
+  control flow section applies to tests too. In a test with multiple mock
+  dependencies, keep each dependency's construction, constants, and
+  expectations together as one block rather than grouping all constructions
+  first, then all expectations.
+
+```cpp
+// Bad: all declarations grouped at the top, then all expectations grouped
+// together. Reader must jump back and forth to connect them.
+TEST(AudioPipelineTest, ProcessesPacket) {
+  auto device = std::make_unique<MockAudioDevice>();
+  constexpr double kSampleRateHz = 48000.0;
+  constexpr float kSample = 0.5F;
+  EXPECT_CALL(*device, Open())
+      .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(CapturePacket{.samples = {kSample}, .frames = 1}));
+  ...
+}
+
+// Good: each dependency is a self-contained block. Constants live right
+// next to the statement that uses them.
+TEST(AudioPipelineTest, ProcessesPacket) {
+  auto device = std::make_unique<MockAudioDevice>();
+  EXPECT_CALL(*device, Open())
+      .WillOnce(Return(AudioPipelineInterface::Status::Ok()));
+
+  constexpr double kSampleRateHz = 48000.0;
+  EXPECT_CALL(*device, sample_rate()).WillRepeatedly(Return(kSampleRateHz));
+
+  constexpr float kSample = 0.5F;
+  EXPECT_CALL(*device, ReadNextPacket())
+      .WillOnce(Return(CapturePacket{.samples = {kSample}, .frames = 1}));
+  ...
+}
+```
+
 - Duplication in tests is more acceptable than in production code. It is fine
   to repeat setup boilerplate across tests; do not factor out the core story of
   a test into a helper that the reader must chase.
@@ -1382,23 +1430,47 @@ TEST(LoopbackCaptureActivationTest, FailsWithoutCom) {
   pass.
 - Prefer direct, deterministic triggers (`SendMessageW`, explicit inputs, fixed
   seeds when unavoidable) and explicit cleanup in the test body or fixture.
-- If a test helper starts needing branches, threads, promises, retries, or
-  hidden cleanup, simplify the test coverage or extract a better production
-  boundary instead of building a mini runtime in `_test.cpp`.
-- Do not add logic to tests unless it is absolutely unavoidable. If it seems
-  unavoidable, ask before adding it.
-- If a test needs branches, loops, retries, conditional cleanup, or helper
-  runtimes to express one scenario, simplify the test or extract a better
-  production boundary instead. Otherwise the test starts needing validation of
-  its own and becomes brittle.
+- Do not add logic to tests or test helpers unless it is absolutely
+  unavoidable. If it seems unavoidable, ask before adding it. Test helpers
+  must be pure data builders: no `if`, `switch`, loops, assertions, or
+  default parameters. Return a value and let the calling test guard it with
+  `ASSERT_*` before use. Each call site should pass every argument explicitly
+  with a named constant so the reader sees the full configuration without
+  chasing the helper signature. When a test allocates memory that will be
+  dereferenced (for example, `CoTaskMemAlloc`), keep the allocation, the
+  `ASSERT_NE` guard, and the dereference in the test body so the assert
+  protects the dereference.
+- If a test or helper starts needing branches, loops, threads, promises,
+  retries, conditional cleanup, or hidden control flow, simplify the test
+  coverage or extract a better production boundary instead of building a mini
+  runtime in `_test.cpp`. Otherwise the test starts needing validation of its
+  own and becomes brittle.
 
 ```cpp
-// Bad: helper complexity starts to dominate the test story.
-ActivationResult RunOnWorkerThread(bool initialize_com, int retry_count);
+// Bad: helper contains logic and a default parameter; dereference is
+// unguarded.
+WAVEFORMATEX* AllocFormat(DWORD sample_rate_hz = 48000) {
+  ...
+  auto* raw = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
+  if (raw != nullptr) {
+    *raw = format;
+  }
+  return raw;
+}
 
-// Good: the test drives one deterministic scenario directly.
-SendMessageW(window.hwnd(), WM_HSCROLL, ..., ...);
-EXPECT_NEAR(pipeline.last_boost_level(), 0.5, 1e-6);
+// Good: helper returns plain data; test owns allocation, guard, and copy.
+WAVEFORMATEX StereoFloatFormat(DWORD sample_rate_hz) {
+  ...
+  return {...};
+}
+TEST(DeviceTest, ReadsPacket) {
+  constexpr DWORD kSampleRateHz = 48000;
+  const WAVEFORMATEX format = StereoFloatFormat(kSampleRateHz);
+  auto* raw = static_cast<WAVEFORMATEX*>(CoTaskMemAlloc(sizeof(format)));
+  ASSERT_NE(raw, nullptr);
+  *raw = format;
+  ...
+}
 ```
 
 ```cpp
