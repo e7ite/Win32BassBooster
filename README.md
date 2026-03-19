@@ -186,8 +186,11 @@ then:
 |-- resources/
 |   `-- app.rc                                # Manifest and version info
 |-- .github/
-|   `-- workflows/build.yml
-|       # CI: release (clang-tidy) + debug (ASan, coverage)
+|   `-- workflows/
+|       |-- build.yml
+|       |   # CI: release (clang-tidy) + debug (ASan, coverage artifact)
+|       `-- deploy-coverage.yml
+|           # Publishes the coverage report to GitHub Pages from main
 |-- .githooks/
 |   `-- pre-commit
 |       # Auto-formats staged files on commit

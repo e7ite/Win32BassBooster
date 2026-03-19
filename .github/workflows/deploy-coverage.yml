@@ -1,33 +1,23 @@
-name: Build
+name: Deploy Coverage
 
 on:
   push:
-  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-pages
+  cancel-in-progress: true
+
 jobs:
-  release:
+  build-coverage:
     runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install LLVM/clang-tidy
-        run: choco install llvm --yes
-
-      - name: Configure
-        run: >
-          cmake -B build
-          -DCMAKE_CXX_CLANG_TIDY="clang-tidy;-warnings-as-errors=*"
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
-
-  debug:
-    runs-on: windows-latest
+    outputs:
+      pages_enabled: ${{ steps.pages-state.outputs.enabled }}
 
     steps:
       - uses: actions/checkout@v4
@@ -158,6 +148,44 @@ jobs:
           Set-Content -Path coverage\coverage-badge.svg -Value $svg `
             -NoNewline
 
+      - name: Configure GitHub Pages
+        id: configure-pages
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Set Pages deployment flag
+        id: pages-state
+        shell: pwsh
+        run: |
+          $pagesEnabled = 'false'
+          if ('${{ steps.configure-pages.outcome }}' -eq 'success') {
+            $pagesEnabled = 'true'
+          }
+          "enabled=$pagesEnabled" | Out-File -FilePath $env:GITHUB_OUTPUT `
+            -Append
+
+      - name: Note skipped Pages deployment
+        if: steps.configure-pages.outcome != 'success'
+        shell: pwsh
+        run: |
+          $summary = @(
+            '## Pages deployment skipped',
+            '',
+            'Coverage artifacts were generated, but GitHub Pages is not',
+            'enabled for this repository yet.',
+            '',
+            'Enable Pages once in repository settings with the source set',
+            'to GitHub Actions, then rerun this workflow to publish the',
+            'public HTML report and README badge.'
+          ) -join "`n"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
+
+      - name: Upload coverage Pages artifact
+        if: steps.pages-state.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: coverage
+
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -165,3 +193,19 @@ jobs:
           name: windows-coverage
           path: coverage
           if-no-files-found: ignore
+
+  deploy-coverage:
+    if: needs.build-coverage.outputs.pages_enabled == 'true'
+    needs: build-coverage
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy coverage report to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
